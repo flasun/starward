@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Slipstream",
+      "hasCanvas": true,
+      "bodyTextLen": 292,
+      "bodyTextHash": "affe78fc0f187020bfe68bf90f7f74f2a7b2db27819d3d0c387f8fd1c714c791",
+      "bodyTextPrefix": "Fly the solar system. Drag to look. Horizon levels the nose. Go ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/controls-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Slipstream",
+      "hasCanvas": true,
+      "bodyTextLen": 255,
+      "bodyTextHash": "213981c46551567cf9b3d1adaa5b4e3fd54c612a8b48d1c0f5684bc9323cefd6",
+      "bodyTextPrefix": "Fly the solar system. Drag to look. Horizon levels the nose. Go ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/controls-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/controls-built.json"
+}

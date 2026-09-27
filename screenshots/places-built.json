@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Slipstream",
+      "hasCanvas": true,
+      "bodyTextLen": 307,
+      "bodyTextHash": "5bffc7ea303d5c3dd3208dbeb421b387f0545ddb3848ee9a05d9640f922fdf4f",
+      "bodyTextPrefix": "Fly the solar system. Move the pointer to steer, choose a place,",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/places-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Slipstream",
+      "hasCanvas": true,
+      "bodyTextLen": 284,
+      "bodyTextHash": "511c24f79705d28aad4d13d5cdd6aaa4e809d610510dd43595a3ea7499a17bc7",
+      "bodyTextPrefix": "Fly the solar system. Move the pointer to steer, choose a place,",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/places-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/places-built.json"
+}

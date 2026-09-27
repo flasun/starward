@@ -1,0 +1,110 @@
+/** Quiet procedural drone. Unlocks only inside a user gesture. */
+
+type AudioCtor = typeof AudioContext;
+
+function audioCtor(): AudioCtor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as Window & { webkitAudioContext?: AudioCtor };
+  return window.AudioContext ?? w.webkitAudioContext ?? null;
+}
+
+export class DriftAudio {
+  private ctx: AudioContext | null = null;
+  private master: GainNode | null = null;
+  private filter: BiquadFilterNode | null = null;
+  private noiseGain: GainNode | null = null;
+  private noiseFilter: BiquadFilterNode | null = null;
+  private oscA: OscillatorNode | null = null;
+  private dead = false;
+
+  /** Call synchronously from pointerdown / keydown. */
+  unlock(): void {
+    if (this.dead) return;
+    const Ctor = audioCtor();
+    if (!Ctor) return;
+    try {
+      if (!this.ctx) {
+        this.ctx = new Ctor({ latencyHint: "interactive" });
+        this.build(this.ctx);
+      }
+      if (this.ctx.state === "suspended") void this.ctx.resume();
+    } catch {
+      this.dead = true;
+    }
+  }
+
+  resume(): void {
+    if (this.ctx && this.ctx.state === "suspended") void this.ctx.resume();
+  }
+
+  update(speed: number, boost: number, muted: boolean): void {
+    if (!this.ctx || !this.master || !this.filter || !this.oscA || !this.noiseGain || !this.noiseFilter) {
+      return;
+    }
+    const t = this.ctx.currentTime;
+    const vol = muted ? 0 : Math.min(0.2, 0.035 + (speed / 90) * 0.07) * (0.8 + boost * 0.35);
+    this.master.gain.setTargetAtTime(vol * vol > 0 ? vol : 0, t, 0.06);
+    this.oscA.frequency.setTargetAtTime(42 + speed * 0.28 + boost * 10, t, 0.08);
+    this.filter.frequency.setTargetAtTime(220 + speed * 5 + boost * 780, t, 0.1);
+    this.noiseGain.gain.setTargetAtTime(muted ? 0 : boost * boost * 0.05, t, 0.08);
+    this.noiseFilter.frequency.setTargetAtTime(280 + boost * 640, t, 0.1);
+  }
+
+  dispose(): void {
+    const ctx = this.ctx;
+    this.ctx = null;
+    this.master = null;
+    this.oscA = null;
+    if (ctx) void ctx.close();
+  }
+
+  private build(ctx: AudioContext): void {
+    const master = ctx.createGain();
+    master.gain.value = 0;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 260;
+    filter.Q.value = 0.65;
+
+    const a = ctx.createOscillator();
+    a.type = "sine";
+    a.frequency.value = 52;
+    const b = ctx.createOscillator();
+    b.type = "triangle";
+    b.frequency.value = 104;
+    const quiet = ctx.createGain();
+    quiet.gain.value = 0.12;
+
+    a.connect(filter);
+    b.connect(quiet);
+    quiet.connect(filter);
+    filter.connect(master);
+    master.connect(ctx.destination);
+    a.start();
+    b.start();
+
+    const seconds = 2;
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * seconds, ctx.sampleRate);
+    const channel = buffer.getChannelData(0);
+    for (let i = 0; i < channel.length; i++) channel[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    noise.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 360;
+    bp.Q.value = 0.55;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0;
+    noise.connect(bp);
+    bp.connect(noiseGain);
+    noiseGain.connect(master);
+    noise.start();
+
+    this.master = master;
+    this.filter = filter;
+    this.oscA = a;
+    this.noiseGain = noiseGain;
+    this.noiseFilter = bp;
+  }
+}

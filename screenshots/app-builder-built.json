@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Slipstream",
+      "hasCanvas": true,
+      "bodyTextLen": 369,
+      "bodyTextHash": "73750688c5691f516700cc47163993b67709d997163f1a691d441042004d6ac7",
+      "bodyTextPrefix": "Fly the solar system. Drag the view to look. Horizon levels the ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Slipstream",
+      "hasCanvas": true,
+      "bodyTextLen": 330,
+      "bodyTextHash": "06519a45c253f485c81f1cf490e839745069843aab31f23f1fd818118c52fca8",
+      "bodyTextPrefix": "Fly the solar system. Drag the view to look. Horizon levels the ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json"
+}
