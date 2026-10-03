@@ -1,5 +1,7 @@
 /** Real solar-system bodies on a compressed map so a flight can cross them. */
 
+import { JOURNEY } from "@/components/starfield/journey";
+
 export type BodyDef = {
   id: string;
   name: string;
@@ -40,6 +42,14 @@ export type BodyDef = {
   ecc?: number;
   /** Comet angular speed, radians per second. */
   meanMotion?: number;
+  /** Fixed map position. Later chapters do not orbit the Sun. */
+  at?: { x: number; y: number; z: number };
+  /** Screen size in world units. Overrides the solar-system scale. */
+  span?: number;
+  /** How to draw a body that is not a planet. */
+  form?: "star" | "galaxy" | "cluster" | "cloud";
+  /** Journey chapter. Missing means the solar system. */
+  chapter?: string;
 };
 
 export const BODIES: BodyDef[] = [
@@ -489,8 +499,43 @@ for (let i = 0; i < 26; i++) {
 
 export const GOAL_COUNT = BODIES.filter((body) => body.goal).length;
 
+export const CHAPTERS = [
+  { id: "sun", name: "Round the Sun", next: "stars", first: "earth" },
+  { id: "stars", name: "The Near Stars", next: "galaxy", first: "proxima" },
+  { id: "galaxy", name: "The Milky Way", next: "local", first: "orion-arm" },
+  { id: "local", name: "Out of the Galaxy", next: "web", first: "lmc" },
+  { id: "web", name: "The Web", next: null, first: "virgo" },
+] as const;
+
+export type ChapterId = (typeof CHAPTERS)[number]["id"];
+
+export function chapterById(id: string) {
+  return CHAPTERS.find((chapter) => chapter.id === id) ?? CHAPTERS[0];
+}
+
+export function bodiesIn(chapter: string): BodyDef[] {
+  if (chapter === "sun") return BODIES;
+  return JOURNEY.filter((body) => body.chapter === chapter);
+}
+
+export function goalsIn(chapter: string): BodyDef[] {
+  return bodiesIn(chapter).filter((body) => body.goal);
+}
+
+export function chapterDone(chapter: string, charted: readonly string[]): boolean {
+  const goals = goalsIn(chapter);
+  return goals.length > 0 && goals.every((body) => charted.includes(body.id));
+}
+
+export function chapterOpen(chapter: string, charted: readonly string[]): boolean {
+  const index = CHAPTERS.findIndex((item) => item.id === chapter);
+  if (index <= 0) return true;
+  const previous = CHAPTERS[index - 1];
+  return previous ? chapterDone(previous.id, charted) : false;
+}
+
 export function bodyById(id: string): BodyDef {
-  return BODIES.find((body) => body.id === id) ?? BODIES[3]!;
+  return BODIES.find((body) => body.id === id) ?? JOURNEY.find((body) => body.id === id) ?? BODIES[3]!;
 }
 
 /** Compressed orbit so Neptune is a flight, not a day. */
@@ -502,6 +547,7 @@ export function orbitRadius(au: number): number {
 export const EARTH_ORBIT = orbitRadius(1);
 
 export function visualRadius(body: BodyDef): number {
+  if (body.span) return body.span;
   if (body.id === "sun") return 64;
   if (body.speck) return 1.15;
   const earth = 12_742;
@@ -511,6 +557,8 @@ export function visualRadius(body: BodyDef): number {
 }
 
 export function surveyRadius(body: BodyDef): number {
+  if (body.form === "star" && body.span) return body.span * 2.4 + 24;
+  if (body.span && body.span > 24) return body.span * 1.35 + 36;
   if (body.speck) return 18;
   if (body.id === "sun") return visualRadius(body) * 2.2 + 28;
   if (body.parent) return visualRadius(body) * 3 + 12;
@@ -518,6 +566,7 @@ export function surveyRadius(body: BodyDef): number {
 }
 
 export function bodyPosition(body: BodyDef, time: number): { x: number; y: number; z: number } {
+  if (body.at) return body.at;
   if (body.parent) {
     const parent = bodyById(body.parent);
     const origin = bodyPosition(parent, time);

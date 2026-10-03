@@ -15,6 +15,7 @@ export class DriftAudio {
   private noiseGain: GainNode | null = null;
   private noiseFilter: BiquadFilterNode | null = null;
   private oscA: OscillatorNode | null = null;
+  private oscB: OscillatorNode | null = null;
   private dead = false;
 
   /** Call synchronously from pointerdown / keydown. */
@@ -38,16 +39,17 @@ export class DriftAudio {
   }
 
   update(speed: number, boost: number, muted: boolean): void {
-    if (!this.ctx || !this.master || !this.filter || !this.oscA || !this.noiseGain || !this.noiseFilter) {
+    if (!this.ctx || !this.master || !this.filter || !this.oscA || !this.oscB || !this.noiseGain || !this.noiseFilter) {
       return;
     }
     const t = this.ctx.currentTime;
-    const vol = muted ? 0 : Math.min(0.2, 0.035 + (speed / 90) * 0.07) * (0.8 + boost * 0.35);
-    this.master.gain.setTargetAtTime(vol * vol > 0 ? vol : 0, t, 0.06);
-    this.oscA.frequency.setTargetAtTime(42 + speed * 0.28 + boost * 10, t, 0.08);
-    this.filter.frequency.setTargetAtTime(220 + speed * 5 + boost * 780, t, 0.1);
-    this.noiseGain.gain.setTargetAtTime(muted ? 0 : boost * boost * 0.05, t, 0.08);
-    this.noiseFilter.frequency.setTargetAtTime(280 + boost * 640, t, 0.1);
+    const vol = muted ? 0 : Math.min(0.26, 0.055 + (speed / 80) * 0.11) * (0.85 + boost * 0.3);
+    this.master.gain.setTargetAtTime(vol, t, 0.08);
+    this.oscA.frequency.setTargetAtTime(32 + speed * 0.16 + boost * 8, t, 0.1);
+    this.oscB.frequency.setTargetAtTime(18 + speed * 0.08 + boost * 4, t, 0.12);
+    this.filter.frequency.setTargetAtTime(120 + speed * 2.4 + boost * 420, t, 0.12);
+    this.noiseGain.gain.setTargetAtTime(muted ? 0 : 0.02 + (speed / 100) * 0.035 + boost * boost * 0.045, t, 0.1);
+    this.noiseFilter.frequency.setTargetAtTime(90 + speed * 1.2 + boost * 280, t, 0.12);
   }
 
   dispose(): void {
@@ -55,6 +57,7 @@ export class DriftAudio {
     this.ctx = null;
     this.master = null;
     this.oscA = null;
+    this.oscB = null;
     if (ctx) void ctx.close();
   }
 
@@ -70,10 +73,10 @@ export class DriftAudio {
     a.type = "sine";
     a.frequency.value = 52;
     const b = ctx.createOscillator();
-    b.type = "triangle";
-    b.frequency.value = 104;
+    b.type = "sine";
+    b.frequency.value = 28;
     const quiet = ctx.createGain();
-    quiet.gain.value = 0.12;
+    quiet.gain.value = 0.55;
 
     a.connect(filter);
     b.connect(quiet);
@@ -91,9 +94,9 @@ export class DriftAudio {
     noise.buffer = buffer;
     noise.loop = true;
     const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.frequency.value = 360;
-    bp.Q.value = 0.55;
+    bp.type = "lowpass";
+    bp.frequency.value = 140;
+    bp.Q.value = 0.7;
     const noiseGain = ctx.createGain();
     noiseGain.gain.value = 0;
     noise.connect(bp);
@@ -104,6 +107,7 @@ export class DriftAudio {
     this.master = master;
     this.filter = filter;
     this.oscA = a;
+    this.oscB = b;
     this.noiseGain = noiseGain;
     this.noiseFilter = bp;
   }

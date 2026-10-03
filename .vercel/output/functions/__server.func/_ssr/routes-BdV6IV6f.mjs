@@ -2,7 +2,8 @@ import { i as __toESM } from "../_runtime.mjs";
 import { a as require_jsx_runtime, o as require_react } from "../_libs/@radix-ui/react-collection+[...].mjs";
 import { n as Volume2, t as VolumeX } from "../_libs/lucide-react.mjs";
 import { i as SliderTrack, n as SliderRange, r as SliderThumb, t as Slider } from "../_libs/@radix-ui/react-slider+[...].mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-_vX0WmUx.js
+import { n as lh, t as Uo } from "../_libs/mediapipe__tasks-vision.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-BdV6IV6f.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function audioCtor() {
@@ -17,6 +18,7 @@ var DriftAudio = class {
 	noiseGain = null;
 	noiseFilter = null;
 	oscA = null;
+	oscB = null;
 	dead = false;
 	/** Call synchronously from pointerdown / keydown. */
 	unlock() {
@@ -37,20 +39,22 @@ var DriftAudio = class {
 		if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
 	}
 	update(speed, boost, muted) {
-		if (!this.ctx || !this.master || !this.filter || !this.oscA || !this.noiseGain || !this.noiseFilter) return;
+		if (!this.ctx || !this.master || !this.filter || !this.oscA || !this.oscB || !this.noiseGain || !this.noiseFilter) return;
 		const t = this.ctx.currentTime;
-		const vol = muted ? 0 : Math.min(.2, .035 + speed / 90 * .07) * (.8 + boost * .35);
-		this.master.gain.setTargetAtTime(vol * vol > 0 ? vol : 0, t, .06);
-		this.oscA.frequency.setTargetAtTime(42 + speed * .28 + boost * 10, t, .08);
-		this.filter.frequency.setTargetAtTime(220 + speed * 5 + boost * 780, t, .1);
-		this.noiseGain.gain.setTargetAtTime(muted ? 0 : boost * boost * .05, t, .08);
-		this.noiseFilter.frequency.setTargetAtTime(280 + boost * 640, t, .1);
+		const vol = muted ? 0 : Math.min(.26, .055 + speed / 80 * .11) * (.85 + boost * .3);
+		this.master.gain.setTargetAtTime(vol, t, .08);
+		this.oscA.frequency.setTargetAtTime(32 + speed * .16 + boost * 8, t, .1);
+		this.oscB.frequency.setTargetAtTime(18 + speed * .08 + boost * 4, t, .12);
+		this.filter.frequency.setTargetAtTime(120 + speed * 2.4 + boost * 420, t, .12);
+		this.noiseGain.gain.setTargetAtTime(muted ? 0 : .02 + speed / 100 * .035 + boost * boost * .045, t, .1);
+		this.noiseFilter.frequency.setTargetAtTime(90 + speed * 1.2 + boost * 280, t, .12);
 	}
 	dispose() {
 		const ctx = this.ctx;
 		this.ctx = null;
 		this.master = null;
 		this.oscA = null;
+		this.oscB = null;
 		if (ctx) ctx.close();
 	}
 	build(ctx) {
@@ -64,10 +68,10 @@ var DriftAudio = class {
 		a.type = "sine";
 		a.frequency.value = 52;
 		const b = ctx.createOscillator();
-		b.type = "triangle";
-		b.frequency.value = 104;
+		b.type = "sine";
+		b.frequency.value = 28;
 		const quiet = ctx.createGain();
-		quiet.gain.value = .12;
+		quiet.gain.value = .55;
 		a.connect(filter);
 		b.connect(quiet);
 		quiet.connect(filter);
@@ -82,9 +86,9 @@ var DriftAudio = class {
 		noise.buffer = buffer;
 		noise.loop = true;
 		const bp = ctx.createBiquadFilter();
-		bp.type = "bandpass";
-		bp.frequency.value = 360;
-		bp.Q.value = .55;
+		bp.type = "lowpass";
+		bp.frequency.value = 140;
+		bp.Q.value = .7;
 		const noiseGain = ctx.createGain();
 		noiseGain.gain.value = 0;
 		noise.connect(bp);
@@ -94,17 +98,18 @@ var DriftAudio = class {
 		this.master = master;
 		this.filter = filter;
 		this.oscA = a;
+		this.oscB = b;
 		this.noiseGain = noiseGain;
 		this.noiseFilter = bp;
 	}
 };
 var NEAR = .62;
 var MAX_STARS = 9e3;
-function clamp(v, min, max) {
+function clamp$1(v, min, max) {
 	return Math.max(min, Math.min(max, v));
 }
 function clamp01(v) {
-	return clamp(v, 0, 1);
+	return clamp$1(v, 0, 1);
 }
 /** Slider 0–1 → world units per second along the flight axis. */
 function cruiseSpeed(slider, reduced) {
@@ -119,6 +124,679 @@ function starBudget(density, mobile) {
 	const min = mobile ? 700 : 1400;
 	return Math.round(min + ((mobile ? 4600 : MAX_STARS) - min) * clamp01(density));
 }
+function place(chapter, seed) {
+	return {
+		id: seed.id,
+		name: seed.name,
+		au: 0,
+		diameterKm: 1,
+		color: seed.color,
+		angle: 0,
+		periodDays: 0,
+		moons: seed.moons,
+		year: seed.year,
+		blurb: seed.blurb,
+		goal: seed.goal !== false,
+		nav: true,
+		group: seed.group,
+		place: seed.place,
+		at: {
+			x: seed.x,
+			y: seed.y ?? 0,
+			z: seed.z
+		},
+		span: seed.span,
+		form: seed.form,
+		chapter
+	};
+}
+var star = (seed) => place("stars", seed);
+var galaxy = (seed) => place("galaxy", seed);
+var local = (seed) => place("local", seed);
+var web = (seed) => place("web", seed);
+/** Real places beyond the Sun, each chapter on its own map. */
+var JOURNEY = [
+	star({
+		id: "sol",
+		name: "Sol",
+		x: 0,
+		z: 0,
+		color: [
+			.98,
+			.84,
+			.5
+		],
+		span: 18,
+		form: "star",
+		group: "Home",
+		place: "The Sun, behind you",
+		year: "G2 star",
+		moons: "Home star",
+		blurb: "The star you just left, seen from outside its system.",
+		goal: false
+	}),
+	star({
+		id: "proxima",
+		name: "Proxima Centauri",
+		x: 48,
+		z: 320,
+		color: [
+			.95,
+			.34,
+			.22
+		],
+		span: 16,
+		form: "star",
+		group: "Home",
+		place: "4.2 light-years",
+		year: "Red dwarf",
+		moons: "Nearest",
+		blurb: "The nearest star to the Sun. A cool red dwarf with a planet in its temperate zone."
+	}),
+	star({
+		id: "alpha",
+		name: "Alpha Centauri",
+		x: 280,
+		y: 30,
+		z: 340,
+		color: [
+			1,
+			.94,
+			.78
+		],
+		span: 30,
+		form: "star",
+		group: "Home",
+		place: "4.4 light-years",
+		year: "Sunlike pair",
+		moons: "Binary",
+		blurb: "Two sunlike stars swinging around each other. Proxima is their distant third."
+	}),
+	star({
+		id: "barnard",
+		name: "Barnard's Star",
+		x: -300,
+		y: -20,
+		z: 480,
+		color: [
+			.9,
+			.28,
+			.18
+		],
+		span: 14,
+		form: "star",
+		group: "Home",
+		place: "6.0 light-years",
+		year: "Red dwarf",
+		moons: "Fastest",
+		blurb: "A dim red dwarf with the fastest motion across the sky of any star."
+	}),
+	star({
+		id: "sirius",
+		name: "Sirius",
+		x: 950,
+		z: 320,
+		color: [
+			.88,
+			.94,
+			1
+		],
+		span: 42,
+		form: "star",
+		group: "Bright",
+		place: "8.6 light-years",
+		year: "White star",
+		moons: "Brightest",
+		blurb: "The brightest star in the night sky. A white dwarf, the Pup, orbits it."
+	}),
+	star({
+		id: "procyon",
+		name: "Procyon",
+		x: -1080,
+		y: 80,
+		z: 700,
+		color: [
+			1,
+			.93,
+			.74
+		],
+		span: 30,
+		form: "star",
+		group: "Bright",
+		place: "11.5 light-years",
+		year: "White-yellow",
+		moons: "With a dwarf",
+		blurb: "One of the dog stars. A white dwarf circles the bright one."
+	}),
+	star({
+		id: "altair",
+		name: "Altair",
+		x: 1520,
+		y: -40,
+		z: -480,
+		color: [
+			.92,
+			.95,
+			1
+		],
+		span: 32,
+		form: "star",
+		group: "Bright",
+		place: "16.7 light-years",
+		year: "White star",
+		moons: "Fast spin",
+		blurb: "A white star spinning so fast it is flattened at the poles."
+	}),
+	star({
+		id: "vega",
+		name: "Vega",
+		x: -1680,
+		y: 140,
+		z: 1100,
+		color: [
+			.72,
+			.84,
+			1
+		],
+		span: 38,
+		form: "star",
+		group: "Bright",
+		place: "25 light-years",
+		year: "Blue-white",
+		moons: "Pole star once",
+		blurb: "A blue-white star that was the pole star around 12,000 BCE, and will be again."
+	}),
+	star({
+		id: "fomalhaut",
+		name: "Fomalhaut",
+		x: 820,
+		y: -160,
+		z: 2200,
+		color: [
+			.95,
+			.95,
+			.88
+		],
+		span: 28,
+		form: "star",
+		group: "Bright",
+		place: "25 light-years",
+		year: "White star",
+		moons: "Debris ring",
+		blurb: "A white star with a bright ring of dust and a disputed planet."
+	}),
+	star({
+		id: "arcturus",
+		name: "Arcturus",
+		x: -700,
+		y: 90,
+		z: 2800,
+		color: [
+			1,
+			.58,
+			.26
+		],
+		span: 54,
+		form: "star",
+		group: "Giants",
+		place: "37 light-years",
+		year: "Orange giant",
+		moons: "Old star",
+		blurb: "An orange giant, older than the Sun, and the brightest star of the northern spring."
+	}),
+	star({
+		id: "betelgeuse",
+		name: "Betelgeuse",
+		x: 2400,
+		y: 180,
+		z: 2600,
+		color: [
+			1,
+			.32,
+			.12
+		],
+		span: 82,
+		form: "star",
+		group: "Giants",
+		place: "About 550 light-years",
+		year: "Red supergiant",
+		moons: "Unsteady",
+		blurb: "A red supergiant large enough to swallow the inner planets. It will end as a supernova."
+	}),
+	star({
+		id: "polaris",
+		name: "Polaris",
+		x: -400,
+		y: 420,
+		z: 4200,
+		color: [
+			1,
+			.9,
+			.58
+		],
+		span: 46,
+		form: "star",
+		group: "Giants",
+		place: "About 450 light-years",
+		year: "Yellow supergiant",
+		moons: "North star",
+		blurb: "The north star of this century. It is a triple, and the bright one pulses."
+	}),
+	galaxy({
+		id: "orion-arm",
+		name: "Orion Arm",
+		x: 0,
+		z: 420,
+		color: [
+			.62,
+			.74,
+			.95
+		],
+		span: 88,
+		form: "cloud",
+		group: "Here",
+		place: "Our minor arm",
+		year: "Stellar spur",
+		moons: "The Sun lives here",
+		blurb: "A spur between two great arms. The Sun and every near star sit inside it."
+	}),
+	galaxy({
+		id: "local-bubble",
+		name: "Local Bubble",
+		x: -780,
+		y: 40,
+		z: -260,
+		color: [
+			.55,
+			.62,
+			.78
+		],
+		span: 54,
+		form: "cloud",
+		group: "Here",
+		place: "About 300 light-years across",
+		year: "Hot cavity",
+		moons: "We are inside",
+		blurb: "A cavity of thin hot gas. Ancient supernovae cleared it, and the Sun drifts inside."
+	}),
+	galaxy({
+		id: "pleiades",
+		name: "Pleiades",
+		x: 1100,
+		y: 180,
+		z: 700,
+		color: [
+			.78,
+			.86,
+			1
+		],
+		span: 50,
+		form: "cluster",
+		group: "Clusters",
+		place: "About 440 light-years",
+		year: "Open cluster",
+		moons: "Young stars",
+		blurb: "A handful of hot young stars still wrapped in the dust they formed from."
+	}),
+	galaxy({
+		id: "orion-nebula",
+		name: "Orion Nebula",
+		x: -1300,
+		y: -90,
+		z: 1500,
+		color: [
+			.95,
+			.48,
+			.62
+		],
+		span: 78,
+		form: "cloud",
+		group: "Clusters",
+		place: "About 1,300 light-years",
+		year: "Star nursery",
+		moons: "New suns",
+		blurb: "The nearest great nursery. New stars are lighting up inside the cloud."
+	}),
+	galaxy({
+		id: "crab",
+		name: "Crab Nebula",
+		x: 1600,
+		y: 70,
+		z: 1900,
+		color: [
+			.95,
+			.62,
+			.45
+		],
+		span: 44,
+		form: "cloud",
+		group: "Clusters",
+		place: "About 6,500 light-years",
+		year: "Supernova shell",
+		moons: "Seen in 1054",
+		blurb: "The wreck of a star that exploded in 1054. A pulsar still spins at the center."
+	}),
+	galaxy({
+		id: "carina",
+		name: "Carina Nebula",
+		x: -700,
+		z: 2500,
+		color: [
+			.95,
+			.55,
+			.42
+		],
+		span: 74,
+		form: "cloud",
+		group: "Clusters",
+		place: "About 7,500 light-years",
+		year: "Star nursery",
+		moons: "Massive stars",
+		blurb: "A vast nursery in the southern sky, home to some of the heaviest stars in the galaxy."
+	}),
+	galaxy({
+		id: "omega",
+		name: "Omega Centauri",
+		x: 980,
+		y: -180,
+		z: 2700,
+		color: [
+			1,
+			.84,
+			.55
+		],
+		span: 52,
+		form: "cluster",
+		group: "Clusters",
+		place: "About 17,000 light-years",
+		year: "Globular cluster",
+		moons: "Millions of stars",
+		blurb: "The largest globular cluster in the galaxy. It may be the core of a dwarf galaxy that was swallowed."
+	}),
+	galaxy({
+		id: "perseus-arm",
+		name: "Perseus Arm",
+		x: -1700,
+		y: 80,
+		z: 3200,
+		color: [
+			.5,
+			.64,
+			.92
+		],
+		span: 72,
+		form: "cloud",
+		group: "Arms",
+		place: "Outward of us",
+		year: "Major arm",
+		moons: "Star-forming",
+		blurb: "One of the two great arms you can see from Earth, outward of the Orion spur."
+	}),
+	galaxy({
+		id: "core",
+		name: "Galactic Core",
+		x: 180,
+		z: 4500,
+		color: [
+			1,
+			.7,
+			.32
+		],
+		span: 128,
+		form: "cluster",
+		group: "Arms",
+		place: "About 26,000 light-years",
+		year: "Dense center",
+		moons: "Sagittarius A*",
+		blurb: "The crowded heart of the Milky Way. A supermassive black hole, Sagittarius A*, sits in the middle. Orbit it. Do not skim it."
+	}),
+	galaxy({
+		id: "far-disc",
+		name: "Far Disc",
+		x: -500,
+		y: 120,
+		z: 5600,
+		color: [
+			.45,
+			.52,
+			.72
+		],
+		span: 96,
+		form: "cloud",
+		group: "Arms",
+		place: "The other side",
+		year: "Far stars",
+		moons: "Hidden by the core",
+		blurb: "The far half of the disc, seen past the core. Dust hides most of it from Earth."
+	}),
+	local({
+		id: "home-galaxy",
+		name: "Milky Way",
+		x: 0,
+		z: -500,
+		color: [
+			.75,
+			.8,
+			.95
+		],
+		span: 210,
+		form: "galaxy",
+		group: "Home",
+		place: "Behind you",
+		year: "Barred spiral",
+		moons: "Your galaxy",
+		blurb: "Home, seen from outside. The disc, the core, and the arms are one shape from here.",
+		goal: false
+	}),
+	local({
+		id: "lmc",
+		name: "Large Magellanic Cloud",
+		x: 1100,
+		y: -80,
+		z: 900,
+		color: [
+			.95,
+			.78,
+			.62
+		],
+		span: 150,
+		form: "cloud",
+		group: "Companions",
+		place: "About 160,000 light-years",
+		year: "Irregular galaxy",
+		moons: "Satellite",
+		blurb: "The largest satellite of the Milky Way, and a galaxy in its own right. This is the first step outside."
+	}),
+	local({
+		id: "smc",
+		name: "Small Magellanic Cloud",
+		x: 1900,
+		y: 80,
+		z: 200,
+		color: [
+			.9,
+			.72,
+			.7
+		],
+		span: 96,
+		form: "cloud",
+		group: "Companions",
+		place: "About 200,000 light-years",
+		year: "Irregular galaxy",
+		moons: "Satellite",
+		blurb: "The smaller Magellanic cloud. A bridge of gas still ties it to the larger one."
+	}),
+	local({
+		id: "barnard-galaxy",
+		name: "Barnard's Galaxy",
+		x: -1500,
+		y: 40,
+		z: 1700,
+		color: [
+			.72,
+			.7,
+			.85
+		],
+		span: 68,
+		form: "cloud",
+		group: "Companions",
+		place: "About 1.6 million light-years",
+		year: "Irregular galaxy",
+		moons: "NGC 6822",
+		blurb: "A small irregular galaxy in the Local Group, far past the Magellanic Clouds."
+	}),
+	local({
+		id: "triangulum",
+		name: "Triangulum",
+		x: 500,
+		y: 220,
+		z: 3400,
+		color: [
+			.7,
+			.78,
+			.98
+		],
+		span: 140,
+		form: "galaxy",
+		group: "Great",
+		place: "About 2.7 million light-years",
+		year: "Spiral",
+		moons: "Third largest",
+		blurb: "The third large galaxy of the Local Group, a clean spiral with a bright inner disc."
+	}),
+	local({
+		id: "andromeda",
+		name: "Andromeda",
+		x: -900,
+		y: 20,
+		z: 4800,
+		color: [
+			.78,
+			.82,
+			1
+		],
+		span: 240,
+		form: "galaxy",
+		group: "Great",
+		place: "About 2.5 million light-years",
+		year: "Spiral",
+		moons: "Largest here",
+		blurb: "The nearest great spiral. It is coming toward the Milky Way, and the two will meet in a few billion years."
+	}),
+	web({
+		id: "virgo",
+		name: "Virgo Cluster",
+		x: 0,
+		z: 520,
+		color: [
+			.95,
+			.86,
+			.62
+		],
+		span: 160,
+		form: "cluster",
+		group: "Near",
+		place: "About 54 million light-years",
+		year: "Galaxy cluster",
+		moons: "About 2,000",
+		blurb: "The nearest major cluster. Thousands of galaxies, and the heart of our local supercluster."
+	}),
+	web({
+		id: "fornax",
+		name: "Fornax Cluster",
+		x: 1700,
+		y: -40,
+		z: 1100,
+		color: [
+			.9,
+			.78,
+			.58
+		],
+		span: 110,
+		form: "cluster",
+		group: "Near",
+		place: "About 62 million light-years",
+		year: "Galaxy cluster",
+		moons: "Second nearby",
+		blurb: "The second rich cluster within reach, in the southern sky."
+	}),
+	web({
+		id: "attractor",
+		name: "Great Attractor",
+		x: -1900,
+		z: 2300,
+		color: [
+			.72,
+			.4,
+			.38
+		],
+		span: 200,
+		form: "cloud",
+		group: "Far",
+		place: "About 200 million light-years",
+		year: "Mass we cannot see",
+		moons: "Behind the disc",
+		blurb: "A pull on our whole neighborhood. The Milky Way’s dust hides most of what is doing the pulling."
+	}),
+	web({
+		id: "perseus-cluster",
+		name: "Perseus Cluster",
+		x: 700,
+		y: -100,
+		z: 3600,
+		color: [
+			.85,
+			.7,
+			.55
+		],
+		span: 130,
+		form: "cluster",
+		group: "Far",
+		place: "About 240 million light-years",
+		year: "Galaxy cluster",
+		moons: "X-ray bright",
+		blurb: "A massive cluster with a bright galaxy at its center and a pool of hot gas."
+	}),
+	web({
+		id: "coma",
+		name: "Coma Cluster",
+		x: -600,
+		y: 140,
+		z: 4500,
+		color: [
+			.95,
+			.9,
+			.7
+		],
+		span: 150,
+		form: "cluster",
+		group: "Far",
+		place: "About 320 million light-years",
+		year: "Galaxy cluster",
+		moons: "Thousands",
+		blurb: "A dense cluster of thousands of galaxies, mostly old ellipticals, in the hair of Berenice."
+	}),
+	web({
+		id: "shapley",
+		name: "Shapley Supercluster",
+		x: 300,
+		y: 40,
+		z: 5800,
+		color: [
+			1,
+			.8,
+			.5
+		],
+		span: 190,
+		form: "cluster",
+		group: "Far",
+		place: "About 650 million light-years",
+		year: "Supercluster",
+		moons: "The great concentration",
+		blurb: "The densest concentration of galaxies in the nearby universe. Farther than this, the chart ends."
+	})
+];
+/** Real solar-system bodies on a compressed map so a flight can cross them. */
 var BODIES = [
 	{
 		id: "sun",
@@ -664,9 +1342,61 @@ for (let i = 0; i < 26; i++) BODIES.push({
 	speck: true,
 	lift: Math.sin(i * 1.7) * 16
 });
-var GOAL_COUNT = BODIES.filter((body) => body.goal).length;
+BODIES.filter((body) => body.goal).length;
+var CHAPTERS = [
+	{
+		id: "sun",
+		name: "Round the Sun",
+		next: "stars",
+		first: "earth"
+	},
+	{
+		id: "stars",
+		name: "The Near Stars",
+		next: "galaxy",
+		first: "proxima"
+	},
+	{
+		id: "galaxy",
+		name: "The Milky Way",
+		next: "local",
+		first: "orion-arm"
+	},
+	{
+		id: "local",
+		name: "Out of the Galaxy",
+		next: "web",
+		first: "lmc"
+	},
+	{
+		id: "web",
+		name: "The Web",
+		next: null,
+		first: "virgo"
+	}
+];
+function chapterById(id) {
+	return CHAPTERS.find((chapter) => chapter.id === id) ?? CHAPTERS[0];
+}
+function bodiesIn(chapter) {
+	if (chapter === "sun") return BODIES;
+	return JOURNEY.filter((body) => body.chapter === chapter);
+}
+function goalsIn(chapter) {
+	return bodiesIn(chapter).filter((body) => body.goal);
+}
+function chapterDone(chapter, charted) {
+	const goals = goalsIn(chapter);
+	return goals.length > 0 && goals.every((body) => charted.includes(body.id));
+}
+function chapterOpen(chapter, charted) {
+	const index = CHAPTERS.findIndex((item) => item.id === chapter);
+	if (index <= 0) return true;
+	const previous = CHAPTERS[index - 1];
+	return previous ? chapterDone(previous.id, charted) : false;
+}
 function bodyById(id) {
-	return BODIES.find((body) => body.id === id) ?? BODIES[3];
+	return BODIES.find((body) => body.id === id) ?? JOURNEY.find((body) => body.id === id) ?? BODIES[3];
 }
 /** Compressed orbit so Neptune is a flight, not a day. */
 function orbitRadius(au) {
@@ -675,6 +1405,7 @@ function orbitRadius(au) {
 }
 var EARTH_ORBIT = orbitRadius(1);
 function visualRadius(body) {
+	if (body.span) return body.span;
 	if (body.id === "sun") return 64;
 	if (body.speck) return 1.15;
 	const scaled = 8.2 * Math.pow(body.diameterKm / 12742, .42);
@@ -682,12 +1413,15 @@ function visualRadius(body) {
 	return Math.max(floor, scaled);
 }
 function surveyRadius(body) {
+	if (body.form === "star" && body.span) return body.span * 2.4 + 24;
+	if (body.span && body.span > 24) return body.span * 1.35 + 36;
 	if (body.speck) return 18;
 	if (body.id === "sun") return visualRadius(body) * 2.2 + 28;
 	if (body.parent) return visualRadius(body) * 3 + 12;
 	return visualRadius(body) * 4.2 + 28;
 }
 function bodyPosition(body, time) {
+	if (body.at) return body.at;
 	if (body.parent) {
 		const origin = bodyPosition(bodyById(body.parent), time);
 		const spin = time * .45 + body.angle;
@@ -769,7 +1503,7 @@ var TASKS = [
 	{
 		id: "wing",
 		name: "Hold the wing",
-		how: "Keep a moon centered in the wing camera for four seconds."
+		how: "Keep a moon centered in either wing camera for four seconds."
 	},
 	{
 		id: "shadow",
@@ -780,6 +1514,16 @@ var TASKS = [
 		id: "eclipse",
 		name: "Eclipse",
 		how: "Line a moon up so it crosses the Sun."
+	},
+	{
+		id: "haul",
+		name: "First station",
+		how: "Load supplies at Earth, carry them out, and found a station."
+	},
+	{
+		id: "lane",
+		name: "Open the lane",
+		how: "Found stations at the Moon, Mars, Ceres, Europa, Titan, and Triton. Supplies load only at Earth."
 	}
 ];
 var GIANTS = [
@@ -869,7 +1613,7 @@ function stepTasks(memory, ctx) {
 		}
 	}
 	if (!memory.done.wing) {
-		if (ctx.view !== "wing") memory.wing = 0;
+		if (ctx.view !== "left" && ctx.view !== "right" && ctx.view !== "wing") memory.wing = 0;
 		else {
 			let held = false;
 			for (const body of BODIES) {
@@ -957,9 +1701,12 @@ void main() {
 
   vec2 sampleUv = uv + vec2(uBg.x * 6.0, uBg.y * 6.0);
   vec3 col = vec3(0.027, 0.031, 0.043);
-  float laneY = sampleUv.y * 0.55;
-  float lane = exp(-(laneY * laneY) * 0.72);
-  col += vec3(0.055, 0.066, 0.09) * lane;
+  float laneAcross = sampleUv.y + 0.22 * sin(sampleUv.x * 0.42);
+  float lane = exp(-laneAcross * laneAcross * 1.35);
+  float core = exp(-laneAcross * laneAcross * 6.5);
+  float rift = smoothstep(0.015, 0.16, abs(laneAcross + 0.04 * sin(sampleUv.x * 1.6)));
+  vec3 milk = vec3(0.11, 0.09, 0.14) * lane + vec3(0.16, 0.11, 0.07) * core;
+  col += milk * mix(0.55, 1.0, rift);
   col += vec3(0.02, 0.025, 0.038) * exp(-dot(uv, uv) * 0.35);
 
   col += vec3(0.62, 0.72, 0.9) * dust(sampleUv, vec2(0.0, 0.0), vec2(70.0, 52.0), 0.985) * 0.55;
@@ -1092,11 +1839,21 @@ void main() {
   alpha *= mix(1.0, tw, uTwinkle);
   if (alpha < 0.004) discard;
 
-  vec3 cool = vec3(0.66, 0.78, 1.0);
+  vec3 cool = vec3(0.62, 0.76, 1.0);
   vec3 white = vec3(0.94, 0.96, 1.0);
-  vec3 warm = vec3(1.0, 0.93, 0.84);
-  vec3 base = vColor < 0.5 ? cool : (vColor < 1.5 ? white : warm);
-  base = mix(base, vec3(1.0), 0.42 + vAlong * 0.28);
+  vec3 warm = vec3(1.0, 0.9, 0.74);
+  vec3 blue = vec3(0.45, 0.66, 1.0);
+  vec3 orange = vec3(1.0, 0.58, 0.28);
+  vec3 red = vec3(1.0, 0.34, 0.26);
+  vec3 base = cool;
+  if (vColor < 0.5) base = cool;
+  else if (vColor < 1.5) base = white;
+  else if (vColor < 2.5) base = warm;
+  else if (vColor < 3.5) base = blue;
+  else if (vColor < 4.5) base = orange;
+  else base = red;
+  float wash = vColor < 2.5 ? 0.42 + vAlong * 0.28 : 0.1;
+  base = mix(base, vec3(1.0), wash);
   float split = uBoost * vSide * 0.16 * vStreak;
   base.r *= 1.0 + split;
   base.b *= 1.0 - split;
@@ -1136,26 +1893,58 @@ void main() {
 `;
 var PLANET_FS = `#version 300 es
 precision highp float;
+uniform float uTime;
 in vec2 vUv;
 in vec3 vTint;
 in float vKind;
 in vec3 vLight;
 in float vStyle;
 out vec4 fragColor;
+
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i);
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
 void main() {
   float r2 = dot(vUv, vUv);
   float r = sqrt(r2);
   vec3 L = normalize(vLight);
   vec4 color = vec4(0.0);
-  if (vKind < 0.12) {
+  if (vKind < 0.04) {
     if (r > 1.0) discard;
-    float glow = exp(-r2 * 1.05);
-    color = vec4(vTint * (0.65 + glow), glow);
+    float glow = exp(-r2 * 1.45);
+    float ang = atan(vUv.y, vUv.x);
+    float ray = pow(max(0.0, 0.62 + 0.28 * sin(ang * 9.0) + 0.16 * sin(ang * 23.0 + 1.4)), 3.0);
+    float warmth = smoothstep(0.05, 0.28, vTint.r - vTint.b);
+    float corona = glow * (0.92 + ray * warmth * 0.16 * smoothstep(0.28, 0.9, r));
+    vec3 col = mix(vTint, vec3(1.0, 0.7, 0.38), warmth * (1.0 - glow) * 0.4);
+    color = vec4(col * (0.48 + glow), corona);
+  } else if (vKind < 0.12) {
+    if (r > 1.0) discard;
+    float mu = sqrt(max(0.0, 1.0 - r2));
+    float limb = pow(mu, 0.42);
+    vec3 edge = vec3(vTint.r, vTint.g * 0.58, vTint.b * 0.22);
+    vec3 core = vTint * vec3(1.08, 1.02, 0.9);
+    color = vec4(mix(edge, core, limb), 1.0);
   } else if (vKind < 0.5) {
     float shell = exp(-pow((r - 0.78) * 4.4, 2.0));
-    float day = 0.12 + 0.88 * clamp(dot(normalize(vec3(vUv, 0.15)), L), 0.0, 1.0);
-    float a = shell * day;
-    color = vec4(vTint * (0.55 + 0.45 * day), a * 0.85);
+    vec3 n = normalize(vec3(vUv, 0.18));
+    float ndl = dot(n, L);
+    float day = 0.08 + 0.92 * clamp(ndl, 0.0, 1.0);
+    float fringe = exp(-9.0 * ndl * ndl);
+    vec3 air = vTint * (0.45 + 0.55 * day) + vec3(0.95, 0.55, 0.28) * fringe * 0.22;
+    color = vec4(air, shell * day * 0.9);
   } else if (vKind > 1.5) {
     float outer = 1.0 - smoothstep(0.9, 1.0, r);
     float inner = smoothstep(0.46, 0.56, r);
@@ -1163,31 +1952,78 @@ void main() {
     float gapOut = 1.0 - smoothstep(0.72, 0.76, r);
     float gap = gapIn * gapOut;
     float a = outer * inner * (1.0 - gap * 0.72);
-    float day = 0.28 + 0.72 * clamp(dot(normalize(vUv + vec2(0.001)), normalize(L.xy + vec2(0.001))), 0.0, 1.0);
+    vec2 light = normalize(L.xy + vec2(0.0001));
+    float px = vKind < 2.15 ? 0.426 : (vKind < 2.45 ? 0.617 : 0.676);
+    float py = vKind < 2.15 ? 2.17 : (vKind < 2.45 ? 5.0 : 6.25);
+    float axis = dot(vUv, light);
+    vec2 perp = vUv - light * axis;
+    float rad = length(vec2(perp.x / px, perp.y / py));
+    float globe = (1.0 - smoothstep(0.82, 1.18, rad)) * smoothstep(0.0, 0.16, -axis);
+    float day = 0.2 + 0.8 * clamp(dot(normalize(vUv + vec2(0.001)), light), 0.0, 1.0);
+    day *= 1.0 - globe * 0.9;
     color = vec4(vTint * day, a * 0.82);
   } else {
     if (r2 > 1.0) discard;
     float nz = sqrt(max(0.0, 1.0 - r2));
     vec3 n = vec3(vUv.x, vUv.y, nz);
     float ndl = dot(n, L);
-    float shade = 0.035 + 0.965 * smoothstep(-0.12, 0.42, ndl);
+    float day = smoothstep(-0.04, 0.42, ndl);
+    float fringe = exp(-8.0 * ndl * ndl) * smoothstep(-0.4, 0.08, ndl);
+    vec3 night = vec3(0.02, 0.035, 0.065);
     float bands = 0.0;
     vec3 tint = vTint;
+    float ocean = 0.0;
+    float cities = 0.0;
+    float cloud = 0.0;
     if (vStyle > 0.5 && vStyle < 1.5) {
       float belt = sin((vUv.y + 0.12 * sin(vUv.x * 5.0)) * 16.0);
-      bands = belt * 0.11 * shade;
-      tint *= 1.0 + belt * 0.06;
+      bands = belt * 0.11;
+      tint *= 1.0 + belt * 0.07;
     } else if (vStyle > 1.5 && vStyle < 2.5) {
-      float land = smoothstep(0.08, 0.55, abs(vUv.y + 0.08 * sin(vUv.x * 4.0)));
-      tint = mix(tint * vec3(0.72, 0.86, 0.7), tint, land);
-    } else if (vStyle > 2.5) {
-      float belt = sin(vUv.y * 10.0) * 0.04 * shade;
-      bands = belt;
+      float lon = atan(vUv.x, max(nz, 0.22)) * 0.8 + uTime * 0.015;
+      float lat = vUv.y * 1.7;
+      float n1 = noise(vec2(lon * 0.9, lat));
+      float n2 = noise(vec2(lon * 1.8 + 4.2, lat * 1.25));
+      float land = smoothstep(0.4, 0.72, n1 * 0.72 + n2 * 0.28);
+      ocean = 1.0 - land;
+      vec3 sea = vTint * vec3(0.34, 0.55, 0.86);
+      vec3 ground = vec3(0.42, 0.58, 0.36);
+      tint = mix(sea, ground, land);
+      cloud = smoothstep(0.5, 0.78, noise(vec2(lon * 1.15 + 2.0 + uTime * 0.01, lat * 0.85)));
+      cities = smoothstep(0.8, 0.95, noise(vec2(lon * 2.8, lat * 2.1))) * land;
+    } else if (vStyle > 2.5 && vStyle < 3.5) {
+      bands = sin(vUv.y * 10.0) * 0.04;
+    } else if (vStyle > 3.5 && vStyle < 4.5) {
+      float lon = atan(vUv.x, max(nz, 0.2));
+      float lat = vUv.y * 2.2;
+      float grain = noise(vec2(lon * 2.2, lat * 1.6));
+      float crater = smoothstep(0.62, 0.86, noise(vec2(lon * 4.6 + 1.7, lat * 3.4)));
+      tint *= 0.76 + grain * 0.38;
+      tint *= 1.0 - crater * 0.42;
+    } else if (vStyle > 4.5 && vStyle < 5.5) {
+      float lon = atan(vUv.x, max(nz, 0.2));
+      float lat = vUv.y * 1.8;
+      float dark = smoothstep(0.46, 0.76, noise(vec2(lon * 1.35 + 0.6, lat)));
+      tint = mix(tint, tint * vec3(0.4, 0.2, 0.14), dark * 0.7);
+    }
+    vec3 lit = mix(night, tint, day);
+    lit += vec3(1.0, 0.86, 0.62) * bands * day;
+    lit += vec3(0.95, 0.52, 0.24) * fringe * 0.26;
+    if (vStyle > 1.15 && vStyle < 1.5) {
+      float band = exp(-pow(vUv.y * 9.0, 2.0));
+      lit *= 1.0 - band * (0.28 + 0.5 * abs(L.y));
     }
     float rim = pow(1.0 - nz, 1.7);
-    float limb = rim * (0.2 + 0.8 * clamp(ndl, 0.0, 1.0));
-    vec3 lit = tint * shade + vec3(bands);
-    lit += mix(vTint, vec3(0.75, 0.86, 1.0), 0.35) * limb * 0.55;
+    lit += mix(vTint, vec3(0.8, 0.9, 1.0), 0.4) * rim * day * 0.62;
+    if (vStyle > 0.9 && vStyle < 1.15) {
+      float spot = exp(-pow((vUv.x - 0.32) * 3.4, 2.0) - pow((vUv.y + 0.18) * 6.2, 2.0));
+      lit = mix(lit, vec3(0.78, 0.3, 0.16), spot * day * 0.82);
+    }
+    vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
+    float spec = pow(max(dot(n, H), 0.0), 46.0) * ocean * day;
+    lit += vec3(0.75, 0.88, 1.0) * spec * 0.4;
+    lit += vec3(1.0, 0.76, 0.42) * cities * smoothstep(0.42, 0.08, day) * 0.7;
+    lit = mix(lit, vec3(0.9, 0.94, 0.97) * (0.22 + 0.78 * day), cloud * 0.42);
     color = vec4(lit, 1.0);
   }
   if (color.a < 0.02) discard;
@@ -1225,7 +2061,7 @@ in float vGlow;
 uniform float uBoost;
 out vec4 fragColor;
 void main() {
-  vec3 col = vColor + vec3(0.40, 0.58, 0.95) * vGlow * (0.4 + uBoost);
+  vec3 col = vColor + vec3(0.55, 0.82, 1.0) * vGlow * (0.65 + uBoost * 1.35);
   fragColor = vec4(min(col, vec3(1.0)), 1.0);
 }
 `;
@@ -1257,124 +2093,196 @@ function shipMesh() {
 	};
 	const nose = [
 		0,
-		.04,
-		2.55
+		.05,
+		2.75
 	];
 	const spine = [
 		0,
-		.34,
-		.25
+		.36,
+		.15
 	];
 	const keel = [
 		0,
-		-.2,
-		.15
+		-.22,
+		.08
 	];
 	const right = [
-		1.85,
-		.02,
-		-.45
+		1.55,
+		.05,
+		-.15
 	];
 	const left = [
-		-1.85,
-		.02,
-		-.45
+		-1.55,
+		.05,
+		-.15
+	];
+	const tipR = [
+		2.05,
+		.22,
+		-.72
+	];
+	const tipL = [
+		-2.05,
+		.22,
+		-.72
 	];
 	const tailTop = [
 		0,
-		.18,
-		-1.55
+		.2,
+		-1.6
 	];
 	const tailBot = [
 		0,
-		-.14,
-		-1.55
+		-.16,
+		-1.5
 	];
-	const top = [
-		.86,
-		.89,
-		.94
+	const white = [
+		.9,
+		.93,
+		.97
 	];
 	const hull = [
-		.62,
-		.66,
-		.74
+		.58,
+		.64,
+		.72
 	];
 	const shade = [
-		.4,
-		.44,
-		.52
+		.34,
+		.38,
+		.46
 	];
 	const belly = [
-		.22,
-		.24,
-		.3
+		.16,
+		.18,
+		.24
 	];
 	const glass = [
-		.78,
-		.86,
-		.96
+		.55,
+		.84,
+		1
 	];
-	push(nose, right, spine, top);
-	push(nose, spine, left, top);
+	const stripe = [
+		.72,
+		.9,
+		1
+	];
+	const engine = [
+		.65,
+		.88,
+		1
+	];
+	push(nose, right, spine, white);
+	push(nose, spine, left, white);
 	push(spine, right, tailTop, hull);
 	push(spine, tailTop, left, hull);
+	push(right, tipR, tailTop, white);
+	push(left, tailTop, tipL, white);
 	push(nose, keel, right, shade);
 	push(nose, left, keel, shade);
 	push(keel, tailBot, right, belly);
 	push(keel, left, tailBot, belly);
+	push(right, tailBot, tipR, shade);
+	push(left, tipL, tailBot, shade);
 	push(tailTop, [
-		.42,
-		-.02,
-		-1.55
+		.36,
+		.02,
+		-1.5
 	], tailBot, belly);
 	push(tailTop, tailBot, [
-		-.42,
-		-.02,
-		-1.55
+		-.36,
+		.02,
+		-1.5
 	], belly);
 	const peak = [
 		0,
-		.58,
-		.22
+		.62,
+		.35
 	];
 	const brow = [
 		0,
-		.14,
-		1.15
+		.16,
+		1.28
 	];
 	push(brow, [
-		.26,
-		.16,
-		.18
-	], peak, glass);
+		.24,
+		.18,
+		.25
+	], peak, glass, .4);
 	push(brow, peak, [
-		-.26,
+		-.24,
+		.18,
+		.25
+	], glass, .4);
+	push([
+		0,
+		.4,
+		.95
+	], [
+		.055,
+		.34,
+		-.55
+	], [
+		0,
+		.32,
+		-.55
+	], stripe, .9);
+	push([
+		0,
+		.4,
+		.95
+	], [
+		0,
+		.32,
+		-.55
+	], [
+		-.055,
+		.34,
+		-.55
+	], stripe, .9);
+	push([
+		-.5,
+		.08,
+		-1.42
+	], [
+		-.28,
+		.08,
+		-1.42
+	], [
+		-.39,
+		.02,
+		-1.78
+	], engine, 1);
+	push([
+		.28,
+		.08,
+		-1.42
+	], [
+		.5,
+		.08,
+		-1.42
+	], [
+		.39,
+		.02,
+		-1.78
+	], engine, 1);
+	push([
+		1.92,
+		.2,
+		-.58
+	], tipR, [
+		1.98,
 		.16,
-		.18
-	], glass);
-	const lamp = (x) => {
-		const z = -1.72;
-		push([
-			x - .2,
-			.12000000000000001,
-			z
-		], [
-			x + .2,
-			.12000000000000001,
-			z
-		], [
-			x,
-			-.09999999999999999,
-			z
-		], [
-			.55,
-			.7,
-			.95
-		], 1);
-	};
-	lamp(-.48);
-	lamp(.48);
+		-.78
+	], engine, 1);
+	push(tipL, [
+		-1.92,
+		.2,
+		-.58
+	], [
+		-1.98,
+		.16,
+		-.78
+	], engine, 1);
 	return new Float32Array(v);
 }
 var SHIP_DATA = shipMesh();
@@ -1386,6 +2294,72 @@ function holdRadius(body) {
 	if (body.speck) return 24;
 	if (body.parent) return Math.max(16, vis * 3.2 + 8);
 	return Math.max(30, vis * 3.6 + 12);
+}
+function skinRadius(body) {
+	const vis = visualRadius(body);
+	if (body.id === "sun") return vis * 1.08;
+	if (body.speck) return 2.2;
+	return Math.max(vis * 1.08, 2.4);
+}
+function formatRange(dist, chapter) {
+	if (chapter !== "sun") {
+		if (dist < 48) return "Here";
+		const hop = dist / 520;
+		return `${hop.toFixed(hop < 10 ? 2 : 1)}× hop`;
+	}
+	const km = dist / EARTH_ORBIT * 149597870;
+	if (km < 8e5) {
+		if (km < 1e3) return `${Math.max(1, Math.round(km))} km`;
+		return `${Math.round(km / 1e3)}k km`;
+	}
+	const au = dist / EARTH_ORBIT;
+	return `${au.toFixed(au < 10 ? 2 : 1)} AU`;
+}
+function plotContacts(contacts, yaw) {
+	if (contacts.length === 0) return [];
+	const ranked = [...contacts].sort((a, b) => a.dist - b.dist);
+	const kept = ranked.slice(0, 8);
+	for (const item of ranked) if (item.target && !kept.includes(item)) kept.push(item);
+	let reach = 90;
+	for (const item of kept) reach = Math.max(reach, item.dist * 1.2);
+	const ahead = cameraForward(yaw, 0);
+	const scale = 42 / reach;
+	return kept.map((item) => {
+		const fore = item.dx * ahead.x + item.dz * ahead.z;
+		const right = item.dx * ahead.z + item.dz * -ahead.x;
+		return {
+			id: item.id,
+			x: clamp$1(right * scale, -46, 46),
+			y: clamp$1(fore * scale, -46, 46),
+			r: item.target ? Math.max(2.4, Math.min(6, item.skin * scale)) : Math.max(1.15, Math.min(4.2, item.skin * scale * .65)),
+			target: item.target,
+			close: item.dist < item.skin * 2.6
+		};
+	});
+}
+function captureWell(body) {
+	const R = visualRadius(body);
+	return {
+		floor: R * 1.05,
+		low1: R * 3.2,
+		mid1: R * 8,
+		high1: R * 18,
+		soi: R * 22,
+		gm: 100 * R * 13
+	};
+}
+function captureBand(dist, well) {
+	if (dist < well.low1) return "low";
+	if (dist < well.mid1) return "mid";
+	if (dist <= well.high1) return "high";
+	return "edge";
+}
+function orbitLevelRadius(body, level) {
+	const skin = skinRadius(body);
+	const mid = holdRadius(body);
+	if (level <= 0) return Math.max(skin * 1.45, skin + 1.2);
+	if (level >= 2) return mid * 2.2;
+	return mid;
 }
 function orbitTangent(rx, ry, rz) {
 	let x = -rz;
@@ -1467,6 +2441,16 @@ var StarfieldEngine = class {
 	yaw = 0;
 	pitch = 0;
 	orbitSign = 1;
+	velX = 0;
+	velY = 0;
+	velZ = 0;
+	inserting = false;
+	insertSeeded = false;
+	captureHold = 0;
+	captureRadius = 0;
+	captureText = "";
+	captureAbort = "";
+	alertUntil = 0;
 	orbitId = "";
 	lapFor = "";
 	lapSkip = "";
@@ -1502,6 +2486,27 @@ var StarfieldEngine = class {
 	pointerY = 0;
 	hasPointer = false;
 	hudPointer = -1;
+	holdLook = false;
+	holdX = 0;
+	holdY = 0;
+	wasFocus = false;
+	tapAt = 0;
+	tapX = 0;
+	tapY = 0;
+	downX = 0;
+	downY = 0;
+	downMoved = false;
+	dragging = false;
+	dragX = 0;
+	dragY = 0;
+	guide = false;
+	guideX = 0;
+	guideY = 0;
+	pendingGuide = null;
+	gazeOn = false;
+	gazeX = 0;
+	gazeY = 0;
+	picks = [];
 	leveling = false;
 	audioAcc = 0;
 	lastWarp = "";
@@ -1510,10 +2515,13 @@ var StarfieldEngine = class {
 	mobile = false;
 	sized = false;
 	shipX = 0;
+	chapter = "sun";
 	shipY = 6;
 	shipZ = 0;
 	placed = false;
 	nearId = "";
+	chartId = "";
+	plot = [];
 	alert = "";
 	planets = null;
 	planetVao = null;
@@ -1541,7 +2549,7 @@ var StarfieldEngine = class {
 		getPitch: () => this.pitch,
 		getFps: () => this.fps,
 		setSteer: (v) => {
-			this.steerOverride = clamp(v, -1, 1);
+			this.steerOverride = clamp$1(v, -1, 1);
 		},
 		setKeys: (codes) => {
 			this.keys.clear();
@@ -1566,6 +2574,12 @@ var StarfieldEngine = class {
 	}
 	level() {
 		this.leveling = true;
+	}
+	/** Smoothed look from the webcam. Does not count as a steer that leaves an orbit. */
+	setGaze(x, y, on) {
+		this.gazeOn = on;
+		this.gazeX = clamp$1(x, -1, 1);
+		this.gazeY = clamp$1(y, -1, 1);
 	}
 	destroy() {
 		this.destroyed = true;
@@ -1648,6 +2662,10 @@ var StarfieldEngine = class {
 				if (/swiftshader|llvmpipe|software/i.test(renderer)) this.quality = .45;
 			}
 			this.mode = "webgl";
+			this.canvas.addEventListener("webglcontextlost", (event) => {
+				event.preventDefault();
+				this.fail("The picture stalled. Refresh to draw again.");
+			}, { signal: this.abort.signal });
 			return;
 		} catch (err) {
 			this.fail(err instanceof Error ? err.message : "WebGL failed to start.");
@@ -1665,6 +2683,7 @@ var StarfieldEngine = class {
 		try {
 			this.planets = link(gl, PLANET_VS, PLANET_FS);
 			this.planetLocs.uRoll = gl.getUniformLocation(this.planets, "uRoll");
+			this.planetLocs.uTime = gl.getUniformLocation(this.planets, "uTime");
 			this.planetVao = gl.createVertexArray();
 			this.planetBuf = gl.createBuffer();
 			gl.bindVertexArray(this.planetVao);
@@ -1728,6 +2747,137 @@ var StarfieldEngine = class {
 			console.error(err instanceof Error ? err.message : "trail shader failed");
 		}
 	}
+	enter(chapter) {
+		this.chapter = chapter;
+		const first = bodiesIn(chapter).find((body) => body.goal) ?? bodiesIn(chapter)[0];
+		if (!first) return;
+		const pos = bodyPosition(first, this.time);
+		let dx = pos.x;
+		let dz = pos.z;
+		let len = Math.hypot(dx, dz);
+		if (len < 1) {
+			dx = 0;
+			dz = 1;
+			len = 1;
+		}
+		const back = Math.max(visualRadius(first) * 4.5, 200);
+		this.shipX = pos.x - dx / len * back;
+		this.shipY = 18;
+		this.shipZ = pos.z - dz / len * back;
+		const fx = pos.x - this.shipX;
+		const fz = pos.z - this.shipZ;
+		const fl = Math.hypot(fx, fz) || 1;
+		this.yaw = Math.atan2(-fx / fl, fz / fl);
+		this.pitch = -.04;
+		this.speed = 56;
+		this.boost = 1;
+		this.velX = 0;
+		this.velY = 0;
+		this.velZ = 0;
+		this.trail.length = 0;
+		this.nearId = "";
+		this.orbitId = "";
+		this.inserting = false;
+		this.insertSeeded = false;
+		this.captureHold = 0;
+		this.captureRadius = 0;
+		this.captureText = "";
+		this.captureAbort = "";
+		this.clearLap(false);
+		this.placed = true;
+	}
+	roster() {
+		return bodiesIn(this.chapter);
+	}
+	cameraEye(view, orbitOn, reduced, stickX) {
+		const pull = reduced ? this.boost * .4 : this.boost;
+		const out = this.orbitSign || 1;
+		if (view === "chase") {
+			if (orbitOn) return [
+				out * (reduced ? 1.6 : 3.4),
+				reduced ? 2.2 : 3.15,
+				reduced ? -10 : -8.4
+			];
+			return [
+				0,
+				1.7 + pull * .55,
+				-11 - pull * 4.2
+			];
+		}
+		if (view === "left" || view === "right") {
+			const side = view === "left" ? -1 : 1;
+			if (orbitOn) return [
+				side * (reduced ? 7 : 9.2),
+				reduced ? 2 : 2.8,
+				reduced ? -8 : -5.6
+			];
+			return [
+				side * (6.4 + pull * 1.8),
+				1.6 + pull * .35,
+				-10 - pull * 2.8
+			];
+		}
+		if (view === "above") return this.abovePerch(orbitOn, reduced, stickX, this.hooks.current.getParams().aboveSide);
+		if (orbitOn) return [
+			out * (reduced ? .2 : .72),
+			reduced ? .28 : .58,
+			reduced ? .08 : -.35
+		];
+		return [
+			0,
+			.15 - pull * .12,
+			.15 - pull * 1.15
+		];
+	}
+	/** Overhead perch. Left, center, or right, still swinging to frame an orbit. */
+	abovePerch(orbitOn, reduced, stickX, side) {
+		const slot = reduced ? 0 : clamp$1(Math.round(side), -1, 1);
+		const shoulder = slot * 6.4;
+		if (orbitOn) {
+			if (reduced) return [
+				shoulder || -(this.orbitSign || 1) * 5.5,
+				3.6,
+				-9.4
+			];
+			const swing = this.time * .36 * (this.orbitSign || 1);
+			const sway = slot === 0 ? 4.6 : 1.5;
+			return [
+				shoulder * .82 + Math.sin(swing) * sway,
+				3.55 + Math.abs(slot) * .2,
+				-11.2 - Math.cos(swing) * .55
+			];
+		}
+		const pass = this.passFrame();
+		const lean = reduced ? 0 : stickX;
+		const nose = reduced ? 0 : this.pitch;
+		const x = shoulder + pass.side * (1.5 + pass.weight * 2.1) - lean * 1.3;
+		const y = 3.15 + pass.weight * 1.2 - nose * 1.4 + this.boost * .4 + Math.abs(slot) * .15;
+		const z = -8.4 - pass.weight * (2.2 + this.boost * 2.6) - Math.abs(lean) * 1.1 - this.boost * 1.6;
+		return [
+			clamp$1(x, -11, 11),
+			clamp$1(y, 2.15, 5.2),
+			clamp$1(z, -14, -6.4)
+		];
+	}
+	/** Where the nearest body sits in view, and how close the pass is. */
+	passFrame() {
+		let best = 0;
+		let side = 0;
+		for (const body of this.roster()) {
+			if (body.quiet) continue;
+			const pos = bodyPosition(body, this.time);
+			const weight = clamp$1(1 - Math.hypot(pos.x - this.shipX, pos.y - this.shipY, pos.z - this.shipZ) / Math.max(surveyRadius(body) * 1.7, visualRadius(body) * 8), 0, 1);
+			if (weight <= best) continue;
+			const cam = worldToCamera(pos.x - this.shipX, pos.y - this.shipY, pos.z - this.shipZ, this.yaw, this.pitch);
+			if (cam.z < .8) continue;
+			best = weight;
+			side = clamp$1(cam.x / Math.max(cam.z, .8), -1.2, 1.2);
+		}
+		return {
+			side,
+			weight: best
+		};
+	}
 	placeShip() {
 		if (this.placed) return;
 		this.placed = true;
@@ -1775,37 +2925,67 @@ var StarfieldEngine = class {
 		return target instanceof Element && Boolean(target.closest("[data-hud]"));
 	}
 	onPointerMove = (e) => {
-		if (e.pointerId === this.hudPointer) return;
-		if (e.pointerType === "touch" && e.buttons === 0) return;
-		if (this.isHud(e.target)) {
-			this.hasPointer = false;
-			this.pointerX = 0;
-			this.pointerY = 0;
-			return;
+		if (Math.hypot(e.clientX - this.downX, e.clientY - this.downY) > 36) this.downMoved = true;
+		if (this.holdLook) {
+			if (Math.hypot(e.clientX - this.holdX, e.clientY - this.holdY) < 36) return;
+			this.holdLook = false;
 		}
+		if (e.pointerId === this.hudPointer || !this.dragging) return;
+		if (e.pointerType === "touch" && e.buttons === 0) return;
+		const dx = e.clientX - this.dragX;
+		const dy = e.clientY - this.dragY;
+		if (Math.hypot(dx, dy) < 36) return;
+		this.pendingGuide = null;
+		this.guide = false;
+		const rect = this.canvas.getBoundingClientRect();
+		const radius = Math.max(180, Math.min(rect.width, rect.height) * .55);
 		this.hasPointer = true;
-		this.readPointer(e);
+		this.pointerX = clamp$1(dx / radius, -1, 1);
+		this.pointerY = clamp$1(dy / radius, -1, 1);
 	};
 	onPointerDown = (e) => {
 		this.audio.unlock();
+		this.downX = e.clientX;
+		this.downY = e.clientY;
+		this.downMoved = false;
 		if (this.isHud(e.target)) {
 			this.hudPointer = e.pointerId;
+			this.dragging = false;
 			this.hasPointer = false;
 			this.pointerX = 0;
 			this.pointerY = 0;
+			this.smoothPX = 0;
+			this.smoothPY = 0;
+			this.guide = false;
+			this.pendingGuide = null;
 			return;
 		}
-		if (e.pointerType === "touch") {
-			this.hasPointer = true;
-			this.readPointer(e);
-		}
+		this.dragging = true;
+		this.dragX = e.clientX;
+		this.dragY = e.clientY;
 	};
 	onPointerUp = (e) => {
 		if (e.pointerId === this.hudPointer) this.hudPointer = -1;
-		if (e.pointerType !== "touch") return;
+		this.dragging = false;
 		this.hasPointer = false;
 		this.pointerX = 0;
 		this.pointerY = 0;
+		if (this.isHud(e.target) || this.downMoved) {
+			this.tapAt = 0;
+			this.pendingGuide = null;
+			return;
+		}
+		const now = performance.now();
+		const repeat = now - this.tapAt < 340 && Math.hypot(e.clientX - this.tapX, e.clientY - this.tapY) < 28;
+		this.tapAt = now;
+		this.tapX = e.clientX;
+		this.tapY = e.clientY;
+		if (repeat) {
+			this.pendingGuide = null;
+			this.tryFocus(e.clientX, e.clientY);
+			return;
+		}
+		this.armGuide(e.clientX, e.clientY);
 	};
 	onPointerLeave = (e) => {
 		if (e.pointerType === "touch") return;
@@ -1813,12 +2993,6 @@ var StarfieldEngine = class {
 		this.pointerX = 0;
 		this.pointerY = 0;
 	};
-	readPointer(e) {
-		const rect = this.canvas.getBoundingClientRect();
-		if (rect.width < 1 || rect.height < 1) return;
-		this.pointerX = clamp((e.clientX - rect.left) / rect.width * 2 - 1, -1, 1);
-		this.pointerY = clamp((e.clientY - rect.top) / rect.height * 2 - 1, -1, 1);
-	}
 	onKeyDown = (e) => {
 		this.audio.unlock();
 		const hud = this.isHud(e.target);
@@ -1837,8 +3011,8 @@ var StarfieldEngine = class {
 		if (this.isHud(e.target)) return;
 		e.preventDefault();
 		const params = this.hooks.current.getParams();
-		const step = clamp(e.deltaY / 1400, -.06, .06);
-		this.hooks.current.onSpeed(clamp(params.speed - step, 0, 1));
+		const step = clamp$1(e.deltaY / 1400, -.06, .06);
+		this.hooks.current.onSpeed(clamp$1(params.speed - step, 0, 1));
 	};
 	onVis = () => {
 		if (document.hidden) this.keys.clear();
@@ -1872,7 +3046,14 @@ var StarfieldEngine = class {
 		if (fresh || packed <= 0) {
 			const bright = .32 + Math.pow(Math.random(), 1.55) * .68;
 			const roll = Math.random();
-			packed = bright + (roll < .16 ? 2 : roll < .52 ? 0 : 1) * 4;
+			let colorId = roll < .16 ? 2 : roll < .52 ? 0 : 1;
+			if (bright > .84) {
+				const rare = Math.random();
+				if (rare < .16) colorId = 3;
+				else if (rare < .3) colorId = 4;
+				else if (rare < .4) colorId = 5;
+			}
+			packed = bright + colorId * 4;
 		}
 		this.data[o] = (Math.random() * 2 - 1) * hx;
 		this.data[o + 1] = (Math.random() * 2 - 1) * hy;
@@ -1881,6 +3062,11 @@ var StarfieldEngine = class {
 	}
 	frame = (now) => {
 		if (!this.running || this.destroyed) return;
+		if (document.hidden) {
+			this.prevNow = 0;
+			this.raf = requestAnimationFrame(this.frame);
+			return;
+		}
 		const dt = Math.min(.05, Math.max(.001, (now - (this.prevNow || now)) / 1e3));
 		this.prevNow = now;
 		this.step(dt);
@@ -1890,10 +3076,35 @@ var StarfieldEngine = class {
 	prevNow = 0;
 	step(dt) {
 		const params = this.hooks.current.getParams();
+		if (params.paused) {
+			this.alert = "Paused";
+			this.alertUntil = this.time + 10;
+			return;
+		}
+		if (this.alert === "Paused") {
+			this.alert = "";
+			this.alertUntil = 0;
+		}
+		if (params.focus && !this.wasFocus) {
+			this.holdLook = true;
+			this.hasPointer = false;
+			this.pointerX = 0;
+			this.pointerY = 0;
+			this.smoothPX = 0;
+			this.smoothPY = 0;
+		}
+		if (!params.focus && this.wasFocus) this.holdLook = false;
+		this.wasFocus = params.focus;
+		if (this.pendingGuide && performance.now() - this.pendingGuide.at > 360) {
+			this.guideX = this.pendingGuide.x;
+			this.guideY = this.pendingGuide.y;
+			this.guide = true;
+			this.pendingGuide = null;
+		}
 		const stick = this.readStick(dt);
 		let sx = stick.x;
 		let sy = stick.y;
-		const manual = Math.abs(this.smoothPX) + Math.abs(this.smoothPY) > .42 || this.keys.has("KeyA") || this.keys.has("KeyD") || this.keys.has("ArrowLeft") || this.keys.has("ArrowRight") || this.keys.has("KeyW") || this.keys.has("KeyS") || this.keys.has("ArrowUp") || this.keys.has("ArrowDown");
+		const manual = this.hasPointer && Math.abs(this.smoothPX) + Math.abs(this.smoothPY) > .55 || this.keys.has("KeyA") || this.keys.has("KeyD") || this.keys.has("ArrowLeft") || this.keys.has("ArrowRight") || this.keys.has("KeyW") || this.keys.has("KeyS") || this.keys.has("ArrowUp") || this.keys.has("ArrowDown");
 		if (!params.boost) this.lapIgnoreBoost = false;
 		if (params.boost && !this.lapIgnoreBoost && (this.orbitId || this.lapFor)) {
 			this.lapSkip = this.lapFor || this.orbitId;
@@ -1918,7 +3129,9 @@ var StarfieldEngine = class {
 			if (pass) {
 				const dist = this.rangeTo(pass.id);
 				const gate = holdRadius(pass) * 2.2;
-				if (this.passId === pass.id && this.passDist > gate && dist <= gate && pass.id !== this.lapSkip) {
+				const crossed = this.passId === pass.id && this.passDist > gate && dist <= gate;
+				const inbound = this.closingOn(pass.id);
+				if (crossed && !inbound && pass.id !== this.lapSkip) {
 					this.lapFor = pass.id;
 					this.lapSwept = 0;
 					this.lapArmed = false;
@@ -1938,17 +3151,29 @@ var StarfieldEngine = class {
 			}
 		}
 		const orbitBody = params.orbit ? params.targetId : this.lapFor || params.targetId;
+		const orbitNear = this.lapFor !== "" || this.rangeTo(orbitBody) < this.clearOrbitRadius(bodyById(orbitBody), params.orbitLevel) * 1.5;
 		const burningOut = params.boost && !this.lapIgnoreBoost;
-		const orbitOn = (params.orbit || this.lapFor !== "") && !manual && !this.lapRelease && !burningOut;
+		const orbitOn = (params.orbit || this.lapFor !== "") && orbitNear && !manual && !this.lapRelease && !burningOut;
+		if (params.orbit && orbitOn && params.autopilot && !this.lapFor) this.hooks.current.onCancelAutopilot();
+		if (!params.orbit && !this.lapFor) this.captureAbort = "";
+		if (!orbitOn) {
+			this.inserting = false;
+			this.insertSeeded = false;
+			this.captureHold = 0;
+			this.captureRadius = 0;
+			this.captureText = "";
+		}
 		if ((params.orbit || this.lapFor) && manual) {
 			this.clearLap(true);
 			this.hooks.current.onCancelOrbit();
-		} else if (params.autopilot && manual) this.hooks.current.onCancelAutopilot();
-		else if (orbitOn || params.autopilot) {
-			const aim = this.aimStick(orbitBody);
+		} else if (params.focus && manual) this.hooks.current.onCancelFocus();
+		else if (params.autopilot && manual) this.hooks.current.onCancelAutopilot();
+		else if (orbitOn && !this.inserting || params.autopilot || params.focus) {
+			const aim = this.aimStick(orbitOn ? orbitBody : params.targetId, orbitOn);
 			if (aim) {
-				sx = clamp(aim.x, -1, 1);
-				sy = clamp(aim.y, -1, 1);
+				const pull = params.focus && !orbitOn ? 1.35 : 1;
+				sx = clamp$1(aim.x * pull, -1, 1);
+				sy = clamp$1(aim.y * pull, -1, 1);
 			}
 		}
 		this.stickX = sx;
@@ -1967,18 +3192,21 @@ var StarfieldEngine = class {
 				this.pitch = 0;
 				this.leveling = false;
 			}
-		} else this.pitch = clamp(this.pitch + pitchRate * dt, -1.05, 1.05);
+		} else this.pitch = clamp$1(this.pitch + pitchRate * dt, -1.05, 1.05);
+		if (!orbitOn) this.steerClear(dt, params.targetId);
 		const dYaw = this.yaw - prevYaw;
 		const dPitch = this.pitch - prevPitch;
 		const approach = this.rangeTo(params.targetId);
-		const bubble = surveyRadius(bodyById(params.targetId));
-		const autoBoost = params.autopilot && !orbitOn && approach > bubble * 3.2;
+		const arrive = skinRadius(bodyById(params.targetId)) * 1.22;
+		const autoBoost = params.autopilot && !orbitOn && approach > arrive * 6;
 		const boostTarget = orbitOn ? 0 : params.boost || autoBoost ? 1 : 0;
 		const bk = boostTarget > this.boost ? 5 : 2.5;
 		this.boost += (boostTarget - this.boost) * (1 - Math.exp(-bk * dt));
 		let targetSpeed = cruiseSpeed(params.speed, params.reducedMotion) * (1 + this.boost * 3.8);
 		let orbitDir = null;
-		if (orbitOn) {
+		let coasted = false;
+		if (orbitOn && this.inserting) coasted = this.flyCapture(dt, bodyById(orbitBody), params.speed, params.reducedMotion);
+		else if (orbitOn) {
 			const body = bodyById(orbitBody);
 			const pos = bodyPosition(body, this.time);
 			const rx = this.shipX - pos.x;
@@ -1988,7 +3216,8 @@ var StarfieldEngine = class {
 			const nx = rx / dist;
 			const ny = ry / dist;
 			const nz = rz / dist;
-			const want = holdRadius(body);
+			const want = this.lapFor === body.id ? this.clearOrbitRadius(body, 1) : this.clearOrbitRadius(body, params.orbitLevel);
+			if (params.orbit && this.lapFor !== body.id) this.captureText = params.orbitLevel <= 0 ? "Low orbit" : params.orbitLevel >= 2 ? "High orbit" : "Mid orbit";
 			if (this.orbitId !== body.id) {
 				this.orbitId = body.id;
 				const seeded = orbitTangent(rx, ry, rz);
@@ -1997,11 +3226,28 @@ var StarfieldEngine = class {
 				this.orbitSign = along >= 0 ? 1 : -1;
 			}
 			const tangent = orbitTangent(rx, ry, rz);
-			const vTan = clamp(want * (params.reducedMotion ? .16 : .28), params.reducedMotion ? 6 : 8, params.reducedMotion ? 12 : 16);
-			const vRad = clamp((dist - want) * .9, -14, params.reducedMotion ? 16 : 26);
+			const vTan = clamp$1(want * (params.reducedMotion ? .16 : .28), params.reducedMotion ? 6 : 8, params.reducedMotion ? 12 : 16);
+			const vRad = clamp$1((dist - want) * .9, -14, params.reducedMotion ? 16 : 26);
+			let hop = 0;
+			for (const other of this.roster()) {
+				if (other.id === body.id || other.quiet) continue;
+				const op = bodyPosition(other, this.time);
+				const ox = this.shipX - op.x;
+				const oy = this.shipY - op.y;
+				const oz = this.shipZ - op.z;
+				const od = Math.hypot(ox, oy, oz);
+				const skin = skinRadius(other);
+				const warn = skin * 2.3;
+				if (od >= warn) continue;
+				const urgency = clamp$1((warn - od) / Math.max(1, warn - skin), 0, 1);
+				const flat = Math.hypot(ox, oz);
+				const rise = Math.sqrt(Math.max(0, (skin + 4) * (skin + 4) - Math.min(flat, skin + 4) ** 2)) + 1.4;
+				hop = Math.max(hop, rise * urgency);
+			}
 			const vx = tangent.x * this.orbitSign * vTan - nx * vRad;
-			const vy = tangent.y * this.orbitSign * vTan - ny * vRad;
+			let vy = tangent.y * this.orbitSign * vTan - ny * vRad;
 			const vz = tangent.z * this.orbitSign * vTan - nz * vRad;
+			vy += clamp$1((pos.y + hop - this.shipY) * 3.4, -20, 20);
 			const mag = Math.hypot(vx, vy, vz) || 1;
 			orbitDir = {
 				x: vx / mag,
@@ -2024,7 +3270,7 @@ var StarfieldEngine = class {
 						const tx = tangent.x * this.orbitSign;
 						const ty = tangent.y * this.orbitSign;
 						const tz = tangent.z * this.orbitSign;
-						this.pitch = Math.asin(clamp(ty, -1, 1));
+						this.pitch = Math.asin(clamp$1(ty, -1, 1));
 						const cp = Math.cos(this.pitch) || 1;
 						this.yaw = Math.atan2(-tx / cp, tz / cp);
 						this.lapRelease = true;
@@ -2035,48 +3281,38 @@ var StarfieldEngine = class {
 			}
 		} else {
 			this.orbitId = "";
-			if (params.autopilot && approach < bubble * 3) targetSpeed *= clamp(approach / (bubble * 3), .45, 1);
+			if (params.autopilot && approach < arrive * 8) targetSpeed *= clamp$1(approach / (arrive * 8), .16, 1);
 		}
 		const respond = targetSpeed > this.speed ? 9 : 5.5;
-		this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-respond * dt));
-		if (!orbitOn && params.autopilot && approach < bubble * 1.2) this.hooks.current.onCancelAutopilot();
-		const forward = orbitDir ?? cameraForward(this.yaw, this.pitch);
-		this.shipX += forward.x * this.speed * dt;
-		this.shipY = clamp(this.shipY + forward.y * this.speed * dt, -90, 90);
-		this.shipZ += forward.z * this.speed * dt;
-		const sunDist = Math.hypot(this.shipX, this.shipY, this.shipZ);
-		if (sunDist < 128) {
-			const push = (128 - sunDist) / 128 * this.speed * dt * 1.8;
-			const inv = 1 / Math.max(sunDist, 1);
-			this.shipX += this.shipX * inv * push;
-			this.shipZ += this.shipZ * inv * push;
-			this.alert = "Too close to the Sun";
-		} else if (this.lapFor) this.alert = `One loop around ${bodyById(this.lapFor).name}`;
-		else this.alert = "";
-		const baseFov = params.view === "chase" ? 62 : params.view === "wing" ? 66 : 70;
-		const pace = clamp((this.speed - 16) / 110, 0, 1);
-		const fovTarget = ((params.reducedMotion ? baseFov - 6 : baseFov) + this.boost * 12 + pace * 11) * Math.PI / 180;
+		if (!coasted && params.autopilot && !orbitOn) targetSpeed = Math.min(targetSpeed, Math.max(arrive * .45, approach * .35));
+		if (!coasted) this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-respond * dt));
+		if (!orbitOn && params.autopilot && approach < arrive && this.closingOn(params.targetId)) {
+			this.speed = Math.min(this.speed, 1.2);
+			this.hooks.current.onCancelAutopilot();
+		}
+		if (!coasted) {
+			const forward = orbitDir ?? cameraForward(this.yaw, this.pitch);
+			this.shipX += forward.x * this.speed * dt;
+			this.shipY = clamp$1(this.shipY + forward.y * this.speed * dt, -90, 90);
+			this.shipZ += forward.z * this.speed * dt;
+		}
+		this.keepOutside();
+		if (this.lapFor) this.alert = `One loop around ${bodyById(this.lapFor).name}`;
+		else if (this.time >= this.alertUntil) this.alert = "";
+		const baseFov = params.view === "cockpit" ? 70 : params.view === "above" ? 64 : params.view === "chase" ? 62 : 66;
+		const pace = clamp$1((this.speed - 16) / 110, 0, 1);
+		const orbitFov = orbitOn ? params.reducedMotion ? -3 : -7 : 0;
+		const boostFov = this.boost * (params.reducedMotion ? 6 : 16);
+		const fovTarget = ((params.reducedMotion ? baseFov - 6 : baseFov) + boostFov + pace * 8 + orbitFov) * Math.PI / 180;
 		this.fov += (fovTarget - this.fov) * (1 - Math.exp(-4 * dt));
 		this.tanFov = Math.tan(this.fov * .5);
-		this.rush = clamp(this.boost * .72 + pace * .85, 0, 1);
-		const eye = params.view === "chase" ? [
-			0,
-			1.7,
-			-11
-		] : params.view === "wing" ? [
-			5.4,
-			1.5,
-			-11
-		] : [
-			0,
-			.15,
-			.15
-		];
-		const ease = 1 - Math.exp(-3.4 * dt);
+		this.rush = clamp$1(this.boost * .72 + pace * .85, 0, 1);
+		const eye = this.cameraEye(params.view, orbitOn, params.reducedMotion, sx);
+		const ease = 1 - Math.exp((orbitOn || this.boost > .15 ? -5.2 : -3.4) * dt);
 		this.eyeX += ((eye[0] ?? 0) - this.eyeX) * ease;
 		this.eyeY += ((eye[1] ?? 0) - this.eyeY) * ease;
 		this.eyeZ += ((eye[2] ?? 0) - this.eyeZ) * ease;
-		const bankTarget = orbitOn ? -this.orbitSign * (params.reducedMotion ? .06 : .16) : clamp(-stick.x, -1, 1) * (params.reducedMotion ? .05 : .14);
+		const bankTarget = orbitOn ? -this.orbitSign * (params.reducedMotion ? .06 : .16) : clamp$1(-stick.x, -1, 1) * (params.reducedMotion ? .05 : .14);
 		this.bank += (bankTarget - this.bank) * (1 - Math.exp(-6 * dt));
 		this.bgX = wrap01(this.bgX - dYaw * .12);
 		this.bgY = wrap01(this.bgY + dPitch * .12);
@@ -2092,7 +3328,7 @@ var StarfieldEngine = class {
 		this.integrateStars(dt, dYaw, dPitch);
 		const rangeText = this.projectSystem(params.targetId);
 		this.rememberTrail();
-		const taskId = stepTasks(this.taskMem, {
+		const taskId = this.chapter === "sun" ? stepTasks(this.taskMem, {
 			dt,
 			speed: this.speed,
 			autopilot: params.autopilot,
@@ -2108,7 +3344,7 @@ var StarfieldEngine = class {
 			shipY: this.shipY,
 			shipZ: this.shipZ,
 			time: this.time
-		});
+		}) : null;
 		if (taskId) this.hooks.current.onTask(taskId, this.time);
 		this.frames += 1;
 		this.fps += (1 / dt - this.fps) * .08;
@@ -2127,7 +3363,7 @@ var StarfieldEngine = class {
 		}
 		const warpText = warpFactor(this.speed).toFixed(2);
 		const aimNow = this.aimStick(params.targetId);
-		const locked = !!aimNow && Math.hypot(aimNow.x, aimNow.y) < .16;
+		const locked = (aimNow ? Math.hypot(aimNow.x, aimNow.y) : 1) < (params.focus ? .22 : .16);
 		if (warpText !== this.lastWarp || this.frames % 2 === 0) {
 			this.lastWarp = warpText;
 			this.hooks.current.onFrame({
@@ -2138,12 +3374,16 @@ var StarfieldEngine = class {
 				leveling: this.leveling,
 				boosting: this.boost > .35 || autoBoost,
 				rangeText,
+				speedText: Math.round(this.speed).toString(),
 				targetId: params.targetId,
 				nearId: this.nearId,
+				chartId: this.chartId,
 				alert: this.alert,
 				markers: this.markers,
+				plot: this.plot,
 				locked,
-				orbiting: orbitOn
+				orbiting: orbitOn,
+				captureText: this.captureText
 			});
 		}
 	}
@@ -2157,7 +3397,7 @@ var StarfieldEngine = class {
 	nearestPass(maxFactor) {
 		let best = null;
 		let bestScore = maxFactor;
-		for (const body of BODIES) {
+		for (const body of this.roster()) {
 			if (body.id === "sun" || body.quiet || body.speck || !body.goal && !body.parent) continue;
 			const score = this.rangeTo(body.id) / holdRadius(body);
 			if (score < bestScore) {
@@ -2167,17 +3407,119 @@ var StarfieldEngine = class {
 		}
 		return best;
 	}
-	aimStick(id) {
-		const pos = bodyPosition(bodyById(id), this.time);
+	aimStick(id, direct = false) {
+		const pos = direct ? bodyPosition(bodyById(id), this.time) : this.guidePoint(id);
 		const cam = worldToCamera(pos.x - this.shipX, pos.y - this.shipY, pos.z - this.shipZ, this.yaw, this.pitch);
 		if (cam.z < 1) return {
 			x: cam.x >= 0 ? .85 : -.85,
-			y: clamp(-cam.y / 48, -.55, .55)
+			y: clamp$1(-cam.y / 48, -.55, .55)
 		};
 		return {
-			x: clamp(cam.x / cam.z * 1.7, -1, 1),
-			y: clamp(-cam.y / cam.z * 1.7, -1, 1)
+			x: clamp$1(cam.x / cam.z * 1.7, -1, 1),
+			y: clamp$1(-cam.y / cam.z * 1.7, -1, 1)
 		};
+	}
+	/** A point past whatever is blocking the line, so the ship goes around it instead of stopping on it. */
+	guidePoint(id) {
+		const goal = bodyPosition(bodyById(id), this.time);
+		const sx = this.shipX;
+		const sy = this.shipY;
+		const sz = this.shipZ;
+		const vx = goal.x - sx;
+		const vy = goal.y - sy;
+		const vz = goal.z - sz;
+		const span = Math.hypot(vx, vy, vz) || 1;
+		const ux = vx / span;
+		const uy = vy / span;
+		const uz = vz / span;
+		let best = null;
+		for (const body of this.roster()) {
+			if (body.quiet || body.id === id) continue;
+			const pos = bodyPosition(body, this.time);
+			const pad = skinRadius(body) * (body.id === "sun" ? 1.45 : 1.15) + (body.id === "sun" ? 16 : 4);
+			const wx = pos.x - sx;
+			const wy = pos.y - sy;
+			const wz = pos.z - sz;
+			const along = wx * ux + wy * uy + wz * uz;
+			const lateral = Math.hypot(wx - ux * along, wy - uy * along, wz - uz * along);
+			const dist = Math.hypot(wx, wy, wz);
+			const stuck = dist < pad * 1.35 && along > -pad;
+			const blocking = along > pad * .25 && along < span - 4 && lateral < pad;
+			if (!stuck && !blocking) continue;
+			const rank = stuck ? dist : along + 1e4;
+			if (!best || rank < best.rank) best = {
+				x: pos.x,
+				y: pos.y,
+				z: pos.z,
+				along,
+				pad,
+				rank
+			};
+		}
+		if (!best) return goal;
+		let ox = sx - best.x;
+		let oy = sy - best.y;
+		let oz = sz - best.z;
+		const om = Math.hypot(ox, oy, oz);
+		if (om < .4) {
+			ox = -uz;
+			oy = 0;
+			oz = ux;
+		} else {
+			ox /= om;
+			oy /= om;
+			oz /= om;
+		}
+		const radial = ux * ox + uy * oy + uz * oz;
+		let tx = ux - ox * radial;
+		let ty = uy - oy * radial;
+		let tz = uz - oz * radial;
+		let tm = Math.hypot(tx, ty, tz);
+		if (tm < .2) {
+			tx = -oz;
+			ty = 0;
+			tz = ox;
+			tm = Math.hypot(tx, ty, tz) || 1;
+		}
+		tx /= tm;
+		ty /= tm;
+		tz /= tm;
+		const out = best.pad + 5;
+		const around = best.pad + 18;
+		return {
+			x: best.x + ox * out + tx * around,
+			y: best.y + oy * out + ty * around,
+			z: best.z + oz * out + tz * around
+		};
+	}
+	/** Turn aside before a body that is not the one you chose. */
+	steerClear(dt, targetId) {
+		const forward = cameraForward(this.yaw, this.pitch);
+		let yawNudge = 0;
+		let pitchNudge = 0;
+		for (const body of this.roster()) {
+			if (body.quiet || body.id === targetId) continue;
+			const pos = bodyPosition(body, this.time);
+			const dx = pos.x - this.shipX;
+			const dy = pos.y - this.shipY;
+			const dz = pos.z - this.shipZ;
+			const dist = Math.hypot(dx, dy, dz);
+			const skin = skinRadius(body);
+			const bubble = body.id === "sun" ? skin * 1.7 : skin * 1.25;
+			if (dist >= bubble || dist < .05) continue;
+			const nx = dx / dist;
+			const ny = dy / dist;
+			const nz = dz / dist;
+			const closing = forward.x * nx + forward.y * ny + forward.z * nz;
+			if (closing < .05 && dist > skin * 1.1 && body.id !== "sun") continue;
+			const urgency = clamp$1((bubble - dist) / (bubble - skin), 0, 1) * (body.id === "sun" ? 1 : Math.max(closing, .35));
+			const gain = body.id === "sun" ? 2.4 : dist < skin * 1.08 ? 3.2 : .9;
+			const side = nx * forward.z + nz * -forward.x;
+			yawNudge += (side === 0 ? 1 : Math.sign(side)) * urgency * gain;
+			pitchNudge += -ny * urgency * (body.id === "sun" ? 1.2 : .45);
+		}
+		this.yaw += clamp$1(yawNudge, -1.6, 1.6) * dt;
+		if (!this.leveling) this.pitch = clamp$1(this.pitch + clamp$1(pitchNudge, -.8, .8) * dt, -1.05, 1.05);
 	}
 	rangeTo(id) {
 		const pos = bodyPosition(bodyById(id), this.time);
@@ -2188,24 +3530,36 @@ var StarfieldEngine = class {
 		const tan = this.tanFov || .7;
 		const cs = Math.cos(-this.bank);
 		const sn = Math.sin(-this.bank);
+		this.picks = [];
 		const rows = [];
 		let near = "";
-		let nearDist = Infinity;
+		let chart = "";
 		let rangeText = "—";
-		for (const body of BODIES) {
+		const contacts = [];
+		for (const body of this.roster()) {
 			const pos = bodyPosition(body, this.time);
 			const dx = pos.x - this.shipX;
 			const dy = pos.y - this.shipY;
 			const dz = pos.z - this.shipZ;
 			const dist = Math.hypot(dx, dy, dz);
 			if (body.id === targetId) {
-				const ratio = dist / EARTH_ORBIT;
-				rangeText = ratio < .08 ? "Here" : `${ratio.toFixed(ratio < 10 ? 2 : 1)}× orbit`;
+				rangeText = formatRange(dist, this.chapter);
+				const flying = this.hooks.current.getParams().autopilot;
+				const seconds = this.speed > .8 ? dist / this.speed : 0;
+				if (flying && rangeText !== "Here" && seconds > 2 && seconds < 3600) rangeText += seconds < 90 ? ` · ${Math.ceil(seconds)}s` : ` · ${Math.ceil(seconds / 60)}m`;
+				if (dist < surveyRadius(body)) {
+					near = body.id;
+					if (body.goal) chart = body.id;
+				}
 			}
-			if (!body.quiet && dist < surveyRadius(body) && dist < nearDist) {
-				near = body.id;
-				nearDist = dist;
-			}
+			if (!body.quiet) contacts.push({
+				id: body.id,
+				dist,
+				dx,
+				dz,
+				skin: skinRadius(body),
+				target: body.id === targetId
+			});
 			const toSun = worldToCamera(-pos.x, -pos.y, -pos.z, this.yaw, this.pitch);
 			let lx = toSun.x;
 			let ly = toSun.y;
@@ -2214,7 +3568,7 @@ var StarfieldEngine = class {
 			lx /= lm;
 			ly /= lm;
 			lz /= lm;
-			const style = body.id === "jupiter" || body.id === "saturn" ? 1 : body.id === "earth" ? 2 : body.id === "uranus" || body.id === "neptune" ? 3 : 0;
+			const style = body.id === "jupiter" ? 1 : body.id === "saturn" ? 1.25 : body.id === "earth" ? 2 : body.id === "uranus" || body.id === "neptune" ? 3 : body.id === "mars" ? 5 : body.parent && !body.speck ? 4 : 0;
 			const cam0 = worldToCamera(dx, dy, dz, this.yaw, this.pitch);
 			const cam = {
 				x: cam0.x - this.eyeX,
@@ -2239,7 +3593,17 @@ var StarfieldEngine = class {
 				continue;
 			}
 			const floor = body.speck ? .0035 : body.id === "sun" ? .02 : .011;
-			const radY = clamp(visualRadius(body) / cam.z / tan, floor, 1.35);
+			const radY = clamp$1(visualRadius(body) / cam.z / tan, floor, 1.35);
+			if (!body.quiet) {
+				const px = cam.x / cam.z / tan / aspect * cs - cam.y / cam.z / tan * sn;
+				const py = cam.x / cam.z / tan / aspect * sn + cam.y / cam.z / tan * cs;
+				this.picks.push({
+					id: body.id,
+					x: px * .5 + .5,
+					y: 1 - (py * .5 + .5),
+					rad: radY * .5
+				});
+			}
 			rows.push({
 				body,
 				dist,
@@ -2255,11 +3619,13 @@ var StarfieldEngine = class {
 				style
 			});
 		}
+		this.chartId = chart;
 		if (near) this.nearId = near;
 		else if (this.nearId) {
 			const held = bodyById(this.nearId);
-			if (this.rangeTo(held.id) > surveyRadius(held) * 2.8) this.nearId = "";
+			if (held.id !== targetId || this.rangeTo(held.id) > surveyRadius(held) * 1.35) this.nearId = "";
 		}
+		this.plot = plotContacts(contacts, this.yaw);
 		rows.sort((a, b) => b.camZ - a.camZ);
 		let count = 0;
 		const push = (row, scaleX, scaleY, kind) => {
@@ -2330,18 +3696,30 @@ var StarfieldEngine = class {
 		};
 		for (const row of rows) {
 			if (row.radY <= 0) continue;
-			if (row.body.id === "sun") {
-				push(row, 3.5, 3.5, 0);
-				push(row, 1.15, 1.15, 0);
+			const form = row.body.form;
+			if (row.body.id === "sun" || form === "star") {
+				push(row, row.body.id === "sun" ? 3.7 : 2.8, row.body.id === "sun" ? 3.7 : 2.8, 0);
+				push(row, 1, 1, .08);
+				continue;
+			}
+			if (form === "galaxy") {
+				push(row, 2.55, .58, 0);
+				push(row, .36, .36, .08);
+				continue;
+			}
+			if (form === "cluster" || form === "cloud") {
+				push(row, form === "cloud" ? 1.65 : 2.15, form === "cloud" ? 1.65 : 2.15, 0);
+				push(row, .42, .42, .08);
+				continue;
 			}
 			if (row.body.id === "halley") push(row, 2.6, 2.6, 0);
 			if (row.body.id === "saturn") push(row, 2.35, .46, 2);
 			if (row.body.id === "jupiter") {
-				push(row, 1.62, .2, 2);
+				push(row, 1.62, .2, 2.3);
 				dimLast(.55);
 			}
 			if (row.body.id === "uranus") {
-				push(row, 1.48, .16, 2);
+				push(row, 1.48, .16, 2.6);
 				dimLast(.45);
 			}
 			const tint = air[row.body.id];
@@ -2366,11 +3744,13 @@ var StarfieldEngine = class {
 			let y = behind ? .46 : 1 - (y1 * .5 + .5);
 			const primary = row.body.id === targetId;
 			if (!primary && (behind || x < 0 || x > 1 || y < .02 || y > .92)) continue;
+			const halo = row.body.id === "sun" || row.body.form === "star" ? 3.6 : row.body.form === "galaxy" ? 1.5 : row.body.form === "cloud" || row.body.form === "cluster" ? 2.1 : row.body.id === "halley" ? 2.6 : 1.22;
+			const lift = behind ? 0 : Math.min(Math.max(row.radY, 0) * .5 * halo, .48);
 			this.markers.push({
 				id: row.body.id,
 				name: behind ? `${row.body.name} · behind` : row.body.name,
-				x: clamp(x, .06, .94),
-				y: clamp(y, .08, .74),
+				x: clamp$1(x, .06, .94),
+				y: clamp$1(y - lift, .05, .72),
 				primary
 			});
 		}
@@ -2384,9 +3764,220 @@ var StarfieldEngine = class {
 		this.markers.push(...kept);
 		return rangeText;
 	}
+	tryFocus(clientX, clientY) {
+		const marker = document.elementFromPoint(clientX, clientY);
+		const named = marker instanceof Element ? marker.closest(".marker") : null;
+		const namedId = named instanceof HTMLElement ? named.dataset.id : "";
+		if (namedId) {
+			this.armFocus(clientX, clientY);
+			this.hooks.current.onFocus(namedId);
+			return;
+		}
+		const rect = this.canvas.getBoundingClientRect();
+		if (rect.width < 1 || rect.height < 1) return;
+		let bestId = "";
+		let best = Infinity;
+		for (const pick of this.picks) {
+			const dx = (pick.x - (clientX - rect.left) / rect.width) * rect.width;
+			const dy = (pick.y - (clientY - rect.top) / rect.height) * rect.height;
+			const dist = Math.hypot(dx, dy);
+			const size = Math.max(pick.rad * rect.height, 18);
+			if (dist > size * 1.05) continue;
+			const score = dist / size;
+			if (score < best) {
+				best = score;
+				bestId = pick.id;
+			}
+		}
+		if (!bestId) return;
+		this.armFocus(clientX, clientY);
+		this.hooks.current.onFocus(bestId);
+	}
+	armFocus(clientX, clientY) {
+		this.holdLook = true;
+		this.holdX = clientX;
+		this.holdY = clientY;
+		this.hasPointer = false;
+		this.pointerX = 0;
+		this.pointerY = 0;
+		this.smoothPX = 0;
+		this.smoothPY = 0;
+	}
+	closingOn(id) {
+		const pos = bodyPosition(bodyById(id), this.time);
+		const dx = pos.x - this.shipX;
+		const dy = pos.y - this.shipY;
+		const dz = pos.z - this.shipZ;
+		const dist = Math.hypot(dx, dy, dz) || 1;
+		const nose = cameraForward(this.yaw, this.pitch);
+		return (nose.x * dx + nose.y * dy + nose.z * dz) / dist > .55;
+	}
+	/** Chosen orbit, pushed outside any moon ring or parent that the circle would cross. */
+	clearOrbitRadius(body, level) {
+		let want = orbitLevelRadius(body, level);
+		const rings = [];
+		for (const other of this.roster()) {
+			if (other.id === body.id || other.quiet) continue;
+			if (other.parent === body.id) rings.push({
+				ring: other.localR ?? 30,
+				pad: skinRadius(other) + 5.5
+			});
+			else if (body.parent && other.id === body.parent) rings.push({
+				ring: body.localR ?? 30,
+				pad: skinRadius(other) + 7
+			});
+		}
+		for (let pass = 0; pass < 6; pass++) {
+			let bumped = false;
+			for (const item of rings) if (Math.abs(want - item.ring) < item.pad) {
+				want = item.ring + item.pad;
+				bumped = true;
+			}
+			if (!bumped) break;
+		}
+		return want;
+	}
+	keepOutside() {
+		for (const body of this.roster()) {
+			const pos = bodyPosition(body, this.time);
+			const dx = this.shipX - pos.x;
+			const dy = this.shipY - pos.y;
+			const dz = this.shipZ - pos.z;
+			const dist = Math.hypot(dx, dy, dz);
+			const skin = skinRadius(body);
+			if (dist >= skin || dist < .001) continue;
+			const scale = skin / dist;
+			this.shipX = pos.x + dx * scale;
+			this.shipY = clamp$1(pos.y + dy * scale, -90, 90);
+			this.shipZ = pos.z + dz * scale;
+			const nx = dx / dist;
+			const ny = dy / dist;
+			const nz = dz / dist;
+			const inward = this.velX * nx + this.velY * ny + this.velZ * nz;
+			if (inward < 0) {
+				this.velX -= nx * inward;
+				this.velY -= ny * inward;
+				this.velZ -= nz * inward;
+			}
+		}
+	}
+	flyCapture(dt, body, throttle, reduced) {
+		const pos = bodyPosition(body, this.time);
+		const rx = this.shipX - pos.x;
+		const ry = this.shipY - pos.y;
+		const rz = this.shipZ - pos.z;
+		const dist = Math.hypot(rx, ry, rz) || 1;
+		const nx = rx / dist;
+		const ny = ry / dist;
+		const nz = rz / dist;
+		const well = captureWell(body);
+		if (!this.insertSeeded) {
+			const facing = cameraForward(this.yaw, this.pitch);
+			const inbound = facing.x * nx + facing.y * ny + facing.z * nz;
+			let dx = facing.x;
+			let dy = facing.y;
+			let dz = facing.z;
+			if (inbound < -.25) {
+				const tangent = orbitTangent(rx, ry, rz);
+				dx = tangent.x;
+				dy = tangent.y;
+				dz = tangent.z;
+				this.pitch = Math.asin(clamp$1(dy, -1, 1));
+				const cp = Math.cos(this.pitch) || 1;
+				this.yaw = Math.atan2(-dx / cp, dz / cp);
+				this.orbitSign = 1;
+			}
+			this.velX = dx * this.speed;
+			this.velY = dy * this.speed;
+			this.velZ = dz * this.speed;
+			this.insertSeeded = true;
+		}
+		const g = well.gm / (dist * dist);
+		this.velX -= nx * g * dt;
+		this.velY -= ny * g * dt;
+		this.velZ -= nz * g * dt;
+		const nose = cameraForward(this.yaw, this.pitch);
+		const along = this.velX * nose.x + this.velY * nose.y + this.velZ * nose.z;
+		const thrust = clamp$1(4 + clamp$1(throttle, 0, 1) * (reduced ? 22 : 46) - along, -22, 24);
+		this.velX += nose.x * thrust * dt;
+		this.velY += nose.y * thrust * dt;
+		this.velZ += nose.z * thrust * dt;
+		this.shipX += this.velX * dt;
+		this.shipY = clamp$1(this.shipY + this.velY * dt, -90, 90);
+		this.shipZ += this.velZ * dt;
+		this.speed = Math.hypot(this.velX, this.velY, this.velZ);
+		const vRad = this.velX * nx + this.velY * ny + this.velZ * nz;
+		const vTan = Math.hypot(this.velX - nx * vRad, this.velY - ny * vRad, this.velZ - nz * vRad);
+		const vCirc = Math.sqrt(well.gm / Math.max(dist, 1));
+		const band = captureBand(dist, well);
+		const label = band === "low" ? "Low" : band === "mid" ? "Mid" : band === "high" ? "High" : "Edge";
+		const tol = reduced ? .28 : .16;
+		const speedErr = (vTan - vCirc) / Math.max(vCirc, .001);
+		const escape = Math.sqrt(2 * well.gm / dist);
+		const drop = (message) => {
+			this.captureText = "";
+			this.alert = message;
+			this.alertUntil = this.time + 3.4;
+			this.inserting = false;
+			this.insertSeeded = false;
+			this.captureHold = 0;
+			this.captureAbort = body.id;
+			this.hooks.current.onCancelOrbit();
+		};
+		if (dist < well.floor) {
+			this.shipX += nx * 8;
+			this.shipZ += nz * 8;
+			this.velX = nx * 16;
+			this.velY = 0;
+			this.velZ = nz * 16;
+			this.speed = 16;
+			drop("Too low. Burning in.");
+			return true;
+		}
+		if (dist > well.soi || band === "edge" && vTan > escape) {
+			drop("Too fast. Skipped the capture.");
+			return true;
+		}
+		if (band !== "edge" && Math.abs(speedErr) < tol && Math.abs(vRad) < vCirc * .3) {
+			this.captureHold += dt;
+			this.captureText = `${label} · hold`;
+			if (this.captureHold > (reduced ? .55 : 1.15)) {
+				this.inserting = false;
+				this.insertSeeded = false;
+				this.captureRadius = dist;
+				this.captureText = `${label} orbit`;
+				this.captureHold = 0;
+				this.orbitId = "";
+			}
+		} else {
+			this.captureHold = Math.max(0, this.captureHold - dt * .35);
+			const note = vRad < -vCirc * .3 ? "falling" : vRad > vCirc * .3 ? "climbing" : speedErr > 0 ? "fast" : "slow";
+			this.captureText = `${label} · ${note}`;
+		}
+		return true;
+	}
+	armGuide(clientX, clientY) {
+		const rect = this.canvas.getBoundingClientRect();
+		if (rect.width < 1 || rect.height < 1) return;
+		const x = (clientX - rect.left) / rect.width * 2 - 1;
+		const y = (clientY - rect.top) / rect.height * 2 - 1;
+		if (Math.hypot(x, y) < .12) return;
+		this.pendingGuide = {
+			x: clamp$1(x * .38, -.42, .42),
+			y: clamp$1(y * .32, -.36, .36),
+			at: performance.now()
+		};
+	}
 	readStick(dt) {
-		const tx = this.hasPointer ? shape(this.pointerX) : 0;
-		const ty = this.hasPointer ? shape(this.pointerY) : 0;
+		if (this.guide) {
+			const fade = Math.exp(-1.8 * dt);
+			this.guideX *= fade;
+			this.guideY *= fade;
+			if (Math.hypot(this.guideX, this.guideY) < .02) this.guide = false;
+		}
+		const gazeScale = this.hooks.current.getParams().reducedMotion ? .34 : .58;
+		const tx = this.hasPointer ? shape(this.pointerX) * .62 : this.guide ? this.guideX : this.gazeOn ? this.gazeX * gazeScale : 0;
+		const ty = this.hasPointer ? shape(this.pointerY) * .62 : this.guide ? this.guideY : this.gazeOn ? this.gazeY * gazeScale : 0;
 		const k = 1 - Math.exp(-12 * dt);
 		this.smoothPX += (tx - this.smoothPX) * k;
 		this.smoothPY += (ty - this.smoothPY) * k;
@@ -2398,8 +3989,8 @@ var StarfieldEngine = class {
 		if (this.keys.has("KeyS") || this.keys.has("ArrowDown")) y += 1;
 		x -= this.steerOverride;
 		return {
-			x: clamp(x, -1, 1),
-			y: clamp(y, -1, 1)
+			x: clamp$1(x, -1, 1),
+			y: clamp$1(y, -1, 1)
 		};
 	}
 	integrateStars(dt, dYaw, dPitch) {
@@ -2571,6 +4162,8 @@ var StarfieldEngine = class {
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 		gl.useProgram(this.planets);
 		gl.uniform1f(this.planetLocs.uRoll ?? null, -this.bank);
+		const reduced = this.hooks.current.getParams().reducedMotion;
+		gl.uniform1f(this.planetLocs.uTime ?? null, this.time * (reduced ? .2 : 1));
 		gl.bindVertexArray(this.planetVao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.planetBuf);
 		gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.planetData.subarray(0, this.planetCount * 12));
@@ -2617,7 +4210,7 @@ var StarfieldEngine = class {
 			const [x0, y0] = rot(cx + (x - z * yawLag) / pz * f, cy - (y + z * pitchLag) / pz * f);
 			const [x1, y1] = rot(hx, hy);
 			const alpha = Math.min(.9, .15 + bright * .65);
-			ctx.strokeStyle = colorId < .5 ? `rgba(186, 206, 242, ${alpha})` : colorId > 1.5 ? `rgba(242, 228, 210, ${alpha})` : `rgba(236, 240, 248, ${alpha})`;
+			ctx.strokeStyle = colorId < .5 ? `rgba(168, 198, 255, ${alpha})` : colorId < 1.5 ? `rgba(236, 240, 248, ${alpha})` : colorId < 2.5 ? `rgba(255, 228, 190, ${alpha})` : colorId < 3.5 ? `rgba(120, 168, 255, ${alpha})` : colorId < 4.5 ? `rgba(255, 148, 72, ${alpha})` : `rgba(255, 96, 72, ${alpha})`;
 			ctx.lineWidth = 1 + bright * 1.4;
 			ctx.beginPath();
 			ctx.moveTo(x0, y0);
@@ -2697,11 +4290,173 @@ var StarfieldEngine = class {
 		}
 	}
 };
+var WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm";
+var MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+/** Webcam iris tracking. Frames stay in the browser. Returns a stop function. */
+async function startGaze(handlers) {
+	if (!navigator.mediaDevices?.getUserMedia) throw new Error("Gaze needs a camera.");
+	let stream;
+	try {
+		stream = await navigator.mediaDevices.getUserMedia({
+			video: {
+				facingMode: "user",
+				width: { ideal: 640 },
+				height: { ideal: 480 }
+			},
+			audio: false
+		});
+	} catch {
+		throw new Error("Camera blocked. Gaze stays off.");
+	}
+	const video = document.createElement("video");
+	video.playsInline = true;
+	video.muted = true;
+	video.srcObject = stream;
+	try {
+		await video.play();
+		const vision = await Uo.forVisionTasks(WASM);
+		let landmarker;
+		try {
+			landmarker = await lh.createFromOptions(vision, {
+				baseOptions: {
+					modelAssetPath: MODEL,
+					delegate: "GPU"
+				},
+				runningMode: "VIDEO",
+				numFaces: 1
+			});
+		} catch {
+			landmarker = await lh.createFromOptions(vision, {
+				baseOptions: {
+					modelAssetPath: MODEL,
+					delegate: "CPU"
+				},
+				runningMode: "VIDEO",
+				numFaces: 1
+			});
+		}
+		return runGaze(video, stream, landmarker, handlers);
+	} catch (err) {
+		video.pause();
+		video.srcObject = null;
+		for (const track of stream.getTracks()) track.stop();
+		throw err instanceof Error ? err : /* @__PURE__ */ new Error("Gaze could not start.");
+	}
+}
+function runGaze(video, stream, landmarker, handlers) {
+	let stopped = false;
+	let raf = 0;
+	let stamp = 0;
+	let smoothX = 0;
+	let smoothY = 0;
+	let baseX = 0;
+	let baseY = 0;
+	let taken = 0;
+	const need = 18;
+	handlers.onStatus("Look at the center");
+	const stop = () => {
+		if (stopped) return;
+		stopped = true;
+		cancelAnimationFrame(raf);
+		landmarker.close();
+		video.pause();
+		video.srcObject = null;
+		for (const track of stream.getTracks()) track.stop();
+		handlers.onSample(0, 0);
+		handlers.onStatus("");
+	};
+	const frame = () => {
+		if (stopped) return;
+		raf = requestAnimationFrame(frame);
+		if (video.readyState < 2) return;
+		stamp = Math.max(stamp + 33, Math.round(performance.now()));
+		let marks;
+		try {
+			marks = landmarker.detectForVideo(video, stamp).faceLandmarks[0];
+		} catch {
+			return;
+		}
+		const sample = marks ? measure(marks) : null;
+		if (!sample) {
+			smoothX *= .85;
+			smoothY *= .85;
+			if (taken >= need) handlers.onSample(smoothX, smoothY);
+			return;
+		}
+		if (taken < need) {
+			baseX += sample.x;
+			baseY += sample.y;
+			taken += 1;
+			if (taken === need) {
+				baseX /= need;
+				baseY /= need;
+				handlers.onStatus("");
+			}
+			return;
+		}
+		const rawX = clamp(-(sample.x - baseX) / .11, -1, 1);
+		const rawY = clamp((sample.y - baseY) / .09, -1, 1);
+		smoothX += (dead(rawX) - smoothX) * .22;
+		smoothY += (dead(rawY) - smoothY) * .22;
+		handlers.onSample(smoothX, smoothY);
+	};
+	raf = requestAnimationFrame(frame);
+	return stop;
+}
+function measure(marks) {
+	if (marks.length >= 478) {
+		if (Math.abs(at(marks, 159).y - at(marks, 145).y) + Math.abs(at(marks, 386).y - at(marks, 374).y) < .012) return null;
+		const leftX = span(at(marks, 33).x, at(marks, 133).x, at(marks, 468).x);
+		const rightX = span(at(marks, 263).x, at(marks, 362).x, at(marks, 473).x);
+		const leftY = span(at(marks, 159).y, at(marks, 145).y, at(marks, 468).y);
+		const rightY = span(at(marks, 386).y, at(marks, 374).y, at(marks, 473).y);
+		return {
+			x: (leftX + rightX) / 2,
+			y: (leftY + rightY) / 2
+		};
+	}
+	if (marks.length < 454) return null;
+	const nose = at(marks, 1);
+	return {
+		x: span(at(marks, 234).x, at(marks, 454).x, nose.x),
+		y: span(at(marks, 10).y, at(marks, 152).y, nose.y)
+	};
+}
+function at(marks, index) {
+	return marks[index] ?? {
+		x: .5,
+		y: .5
+	};
+}
+function span(a, b, point) {
+	const lo = Math.min(a, b);
+	const hi = Math.max(a, b);
+	return (point - lo) / (hi - lo || 1);
+}
+function dead(value) {
+	const amount = Math.abs(value);
+	if (amount < .16) return 0;
+	return Math.sign(value) * Math.min(1, (amount - .16) / .84);
+}
+function clamp(value, min, max) {
+	return Math.max(min, Math.min(max, value));
+}
 var STORAGE = "slipstream-settings";
 var SURVEY = "slipstream-survey";
 var HELP = "slipstream-help";
 var LOG = "slipstream-log";
-var NAV = BODIES.filter((body) => body.nav);
+var CHAPTER_KEY = "slipstream-chapter";
+var STATIONS_KEY = "slipstream-stations";
+var CARGO_KEY = "slipstream-cargo";
+var YARD = "earth";
+var LANE = [
+	"moon",
+	"mars",
+	"ceres",
+	"europa",
+	"titan",
+	"triton"
+];
 var VIEWS = [
 	{
 		id: "cockpit",
@@ -2714,33 +4469,51 @@ var VIEWS = [
 		tip: "Camera behind the ship"
 	},
 	{
-		id: "wing",
-		label: "Wing",
-		tip: "Camera off the left side"
+		id: "left",
+		label: "Left",
+		tip: "Camera off the left wing"
+	},
+	{
+		id: "right",
+		label: "Right",
+		tip: "Camera off the right wing"
+	},
+	{
+		id: "above",
+		label: "Above",
+		tip: "Overhead. Each press steps left, center, then right."
 	}
 ];
 var LESSONS = [
 	{
 		title: "Look around",
-		body: "Drag the sky to steer. A and D turn. W and S pitch the nose."
+		body: "Drag the sky to steer, or turn on Gaze in More and look. A click nudges the nose. Double-tap a world to fly there and orbit it. A and D steer, W and S pitch, Space is warp, and Escape pauses."
 	},
 	{
 		title: "Set your speed",
-		body: "Speed is your cruise. Boost burns harder, and a close pass flies one loop around that world, then boosts on. Orbit on the place card, or under More, holds the circle. O toggles it."
+		body: "Speed is your cruise. Orbit has three heights. Low skims the surface, Mid is the usual circle, and High sits farther out."
 	},
 	{
 		title: "Chart a place",
-		body: "Pick a world, then Go. On its card, Next flies you to the following place. Orbit holds you there until you leave, boost, or choose another."
+		body: "Pick a world, then Go. Finish the places in a chapter and Onward opens the next scale, from the near stars out to the galaxy clusters."
 	},
 	{
 		title: "Change the camera",
-		body: "Cockpit is the nose. Chase sits behind the ship. Wing looks from the side. Full fills the screen."
+		body: "Cockpit is the nose. Chase sits behind the ship. Left and Right are the wings. Above steps from the left, to the center, then to the right. Full fills the screen."
 	},
 	{
 		title: "Fly a task",
 		body: "Open Log. Soft arrivals, slingshots, the ring cut, and the rest are saved with your time. A faint trail marks where you have flown."
 	}
 ];
+var FIRST_FLIGHT = [
+	"earth",
+	"moon",
+	"mars"
+];
+function isChartable(id) {
+	return CHAPTERS.some((chapter) => goalsIn(chapter.id).some((body) => body.id === id));
+}
 function navSections(bodies) {
 	const sections = [];
 	for (const body of bodies) {
@@ -2757,11 +4530,20 @@ function Slipstream() {
 	const canvasRef = (0, import_react.useRef)(null);
 	const stageRef = (0, import_react.useRef)(null);
 	const warpRef = (0, import_react.useRef)(null);
+	const distRef = (0, import_react.useRef)(null);
+	const spdRef = (0, import_react.useRef)(null);
+	const noseRef = (0, import_react.useRef)(null);
+	const plotRef = (0, import_react.useRef)(null);
+	const captureRef = (0, import_react.useRef)(null);
 	const rangeRef = (0, import_react.useRef)(null);
 	const markerRefs = (0, import_react.useRef)({});
 	const nearSeen = (0, import_react.useRef)("");
+	const chartSeen = (0, import_react.useRef)("");
 	const alertSeen = (0, import_react.useRef)("");
 	const levelSeen = (0, import_react.useRef)(false);
+	const touchedAt = (0, import_react.useRef)(0);
+	const lockedAt = (0, import_react.useRef)(0);
+	const wasLocked = (0, import_react.useRef)(false);
 	const engineRef = (0, import_react.useRef)(null);
 	const hooksRef = (0, import_react.useRef)({
 		getParams: () => paramsRef.current,
@@ -2772,6 +4554,8 @@ function Slipstream() {
 		onCancelAutopilot: () => {},
 		onCancelOrbit: () => {},
 		onToggleOrbit: () => {},
+		onFocus: () => {},
+		onCancelFocus: () => {},
 		onBeginLap: () => {},
 		onEndLap: () => {},
 		onTask: () => {}
@@ -2784,8 +4568,12 @@ function Slipstream() {
 		reducedMotion: false,
 		targetId: "earth",
 		autopilot: false,
+		focus: false,
 		orbit: false,
-		view: "cockpit"
+		orbitLevel: 1,
+		view: "cockpit",
+		aboveSide: -1,
+		paused: false
 	});
 	const [speed, setSpeed] = (0, import_react.useState)(.42);
 	const [density, setDensity] = (0, import_react.useState)(.52);
@@ -2797,6 +4585,8 @@ function Slipstream() {
 	const [targetId, setTargetId] = (0, import_react.useState)("earth");
 	const [autopilot, setAutopilot] = (0, import_react.useState)(false);
 	const [orbit, setOrbit] = (0, import_react.useState)(false);
+	const [orbitLevel, setOrbitLevel] = (0, import_react.useState)(1);
+	const [focus, setFocus] = (0, import_react.useState)(false);
 	const [navOpen, setNavOpen] = (0, import_react.useState)(false);
 	const [moreOpen, setMoreOpen] = (0, import_react.useState)(false);
 	const [noseLevel, setNoseLevel] = (0, import_react.useState)(false);
@@ -2804,12 +4594,25 @@ function Slipstream() {
 	const [dismissed, setDismissed] = (0, import_react.useState)("");
 	const [alert, setAlert] = (0, import_react.useState)("");
 	const [charted, setCharted] = (0, import_react.useState)([]);
+	const [chapterId, setChapterId] = (0, import_react.useState)("sun");
+	const [mapOpen, setMapOpen] = (0, import_react.useState)(false);
 	const [view, setView] = (0, import_react.useState)("cockpit");
+	const [aboveSide, setAboveSide] = (0, import_react.useState)(-1);
 	const [full, setFull] = (0, import_react.useState)(false);
 	const [lesson, setLesson] = (0, import_react.useState)(null);
 	const [logOpen, setLogOpen] = (0, import_react.useState)(false);
 	const [log, setLog] = (0, import_react.useState)([]);
 	const [banner, setBanner] = (0, import_react.useState)("");
+	const [stations, setStations] = (0, import_react.useState)([]);
+	const [cargo, setCargo] = (0, import_react.useState)(false);
+	const [paused, setPaused] = (0, import_react.useState)(false);
+	const stationsRef = (0, import_react.useRef)([]);
+	const [gazeOn, setGazeOn] = (0, import_react.useState)(false);
+	const [gazeNote, setGazeNote] = (0, import_react.useState)("");
+	const [tourOn, setTourOn] = (0, import_react.useState)(false);
+	const [coach, setCoach] = (0, import_react.useState)("");
+	const tourRef = (0, import_react.useRef)(null);
+	const linkedTarget = (0, import_react.useRef)(null);
 	paramsRef.current = {
 		speed,
 		density,
@@ -2818,8 +4621,12 @@ function Slipstream() {
 		reducedMotion: reduced,
 		targetId,
 		autopilot,
+		focus,
 		orbit,
-		view
+		orbitLevel,
+		view,
+		aboveSide,
+		paused
 	};
 	hooksRef.current.getParams = () => paramsRef.current;
 	hooksRef.current.onSpeed = (next) => setSpeed(clamp01(next));
@@ -2829,11 +4636,26 @@ function Slipstream() {
 	};
 	hooksRef.current.onCancelAutopilot = () => setAutopilot(false);
 	hooksRef.current.onCancelOrbit = () => setOrbit(false);
+	hooksRef.current.onFocus = (id) => {
+		if (paramsRef.current.targetId === id && paramsRef.current.orbit) {
+			setOrbit(false);
+			setFocus(false);
+			setAutopilot(false);
+			return;
+		}
+		setTargetId(id);
+		setOrbit(true);
+		setBoost(false);
+		setAutopilot(true);
+		setFocus(true);
+	};
+	hooksRef.current.onCancelFocus = () => setFocus(false);
 	hooksRef.current.onBeginLap = (id) => {
 		setTargetId(id);
 		setOrbit(true);
 		setBoost(false);
 		setAutopilot(false);
+		setFocus(false);
 	};
 	hooksRef.current.onEndLap = () => {
 		setOrbit(false);
@@ -2846,6 +4668,7 @@ function Slipstream() {
 			if (next) {
 				setBoost(false);
 				setAutopilot(false);
+				setFocus(false);
 			}
 			return next;
 		});
@@ -2862,6 +4685,16 @@ function Slipstream() {
 	hooksRef.current.onFrame = (snap) => {
 		const warp = warpRef.current;
 		if (warp && warp.textContent !== snap.warpText) warp.textContent = snap.warpText;
+		const dist = distRef.current;
+		if (dist && dist.textContent !== snap.rangeText) dist.textContent = snap.rangeText;
+		const spd = spdRef.current;
+		if (spd && spd.textContent !== snap.speedText) spd.textContent = snap.speedText;
+		const nose = noseRef.current;
+		const noseText = `${Math.round(snap.pitch * 180 / Math.PI)}°`;
+		if (nose && nose.textContent !== noseText) nose.textContent = noseText;
+		paintPlot(snap.plot);
+		const capture = captureRef.current;
+		if (capture && capture.textContent !== snap.captureText) capture.textContent = snap.captureText;
 		const range = rangeRef.current;
 		if (range && range.textContent !== snap.rangeText) range.textContent = snap.rangeText;
 		const stage = stageRef.current;
@@ -2873,6 +4706,11 @@ function Slipstream() {
 			if (stage.dataset.boosting !== flag) stage.dataset.boosting = flag;
 			const locked = snap.locked ? "true" : "false";
 			if (stage.dataset.locked !== locked) stage.dataset.locked = locked;
+			const now = performance.now();
+			if (snap.locked && !wasLocked.current) lockedAt.current = now;
+			wasLocked.current = snap.locked;
+			const note = snap.locked && now - Math.max(touchedAt.current, lockedAt.current) < 2200 ? "true" : "false";
+			if (stage.dataset.locknote !== note) stage.dataset.locknote = note;
 			const orbiting = snap.orbiting ? "true" : "false";
 			if (stage.dataset.orbiting !== orbiting) stage.dataset.orbiting = orbiting;
 		}
@@ -2881,11 +4719,42 @@ function Slipstream() {
 			setNoseLevel(snap.leveling);
 		}
 		paintMarkers(snap.markers);
+		if (snap.chartId !== chartSeen.current) {
+			chartSeen.current = snap.chartId;
+			if (snap.chartId && bodyById(snap.chartId).goal) {
+				const chartId = snap.chartId;
+				setCharted((prev) => {
+					if (prev.includes(chartId)) return prev;
+					const tour = tourRef.current;
+					const index = tour ? tour.indexOf(chartId) : -1;
+					const next = index >= 0 ? tour?.[index + 1] : void 0;
+					if (next) queueMicrotask(() => {
+						setTargetId(next);
+						setOrbit(false);
+						setBoost(false);
+						setAutopilot(true);
+						setFocus(true);
+						setCoach(`${bodyById(chartId).name} charted. On to ${bodyById(next).name}.`);
+					});
+					else if (index >= 0) {
+						tourRef.current = null;
+						queueMicrotask(() => {
+							setTourOn(false);
+							setAutopilot(false);
+							setCoach("Earth, the Moon, and Mars are charted. Pick the next world.");
+						});
+					}
+					try {
+						navigator.vibrate?.(16);
+					} catch {}
+					return [...prev, chartId];
+				});
+			}
+		}
 		if (snap.nearId !== nearSeen.current) {
 			nearSeen.current = snap.nearId;
 			setNearId(snap.nearId);
 			if (!snap.nearId) setDismissed("");
-			if (snap.nearId && bodyById(snap.nearId).goal) setCharted((prev) => prev.includes(snap.nearId) ? prev : [...prev, snap.nearId]);
 		}
 		if (snap.alert !== alertSeen.current) {
 			alertSeen.current = snap.alert;
@@ -2900,6 +4769,19 @@ function Slipstream() {
 		return () => mq.removeEventListener("change", apply);
 	}, []);
 	(0, import_react.useEffect)(() => {
+		const bump = () => {
+			touchedAt.current = performance.now();
+		};
+		window.addEventListener("pointerdown", bump);
+		window.addEventListener("pointerup", bump);
+		window.addEventListener("keydown", bump);
+		return () => {
+			window.removeEventListener("pointerdown", bump);
+			window.removeEventListener("pointerup", bump);
+			window.removeEventListener("keydown", bump);
+		};
+	}, []);
+	(0, import_react.useEffect)(() => {
 		try {
 			const raw = localStorage.getItem(STORAGE);
 			if (!raw) return;
@@ -2907,7 +4789,9 @@ function Slipstream() {
 			if (typeof parsed.speed === "number") setSpeed(clamp01(parsed.speed));
 			if (typeof parsed.density === "number") setDensity(clamp01(parsed.density));
 			if (typeof parsed.muted === "boolean") setMuted(parsed.muted);
-			if (parsed.view === "cockpit" || parsed.view === "chase" || parsed.view === "wing") setView(parsed.view);
+			if (parsed.view === "wing") setView("left");
+			if (parsed.view === "cockpit" || parsed.view === "chase" || parsed.view === "left" || parsed.view === "right" || parsed.view === "above") setView(parsed.view);
+			if (parsed.aboveSide === -1 || parsed.aboveSide === 0 || parsed.aboveSide === 1) setAboveSide(parsed.aboveSide);
 		} catch {}
 	}, []);
 	const skipSave = (0, import_react.useRef)(true);
@@ -2920,13 +4804,15 @@ function Slipstream() {
 			speed,
 			density,
 			muted,
-			view
+			view,
+			aboveSide
 		}));
 	}, [
 		speed,
 		density,
 		muted,
-		view
+		view,
+		aboveSide
 	]);
 	(0, import_react.useEffect)(() => {
 		try {
@@ -2934,9 +4820,56 @@ function Slipstream() {
 			if (!raw) return;
 			const parsed = JSON.parse(raw);
 			if (!Array.isArray(parsed)) return;
-			setCharted(parsed.filter((id) => typeof id === "string" && BODIES.some((body) => body.id === id && body.goal)));
+			const ids = parsed.filter((id) => typeof id === "string" && isChartable(id));
+			setCharted(ids);
+			const saved = localStorage.getItem(CHAPTER_KEY);
+			if (typeof saved === "string" && CHAPTERS.some((chapter) => chapter.id === saved) && chapterOpen(saved, ids)) setChapterId(saved);
 		} catch {}
 	}, []);
+	const skipChapter = (0, import_react.useRef)(true);
+	(0, import_react.useEffect)(() => {
+		if (skipChapter.current) {
+			skipChapter.current = false;
+			return;
+		}
+		localStorage.setItem(CHAPTER_KEY, chapterId);
+	}, [chapterId]);
+	(0, import_react.useEffect)(() => {
+		try {
+			const raw = localStorage.getItem(STATIONS_KEY);
+			if (raw) {
+				const parsed = JSON.parse(raw);
+				if (Array.isArray(parsed)) setStations(parsed.filter((id) => typeof id === "string" && LANE.includes(id)));
+			}
+			setCargo(localStorage.getItem(CARGO_KEY) === "1");
+		} catch {}
+	}, []);
+	(0, import_react.useEffect)(() => {
+		localStorage.setItem(STATIONS_KEY, JSON.stringify(stations));
+		localStorage.setItem(CARGO_KEY, cargo ? "1" : "0");
+	}, [stations, cargo]);
+	const chapterBoot = (0, import_react.useRef)(true);
+	(0, import_react.useEffect)(() => {
+		const engine = engineRef.current;
+		if (!engine) return;
+		if (chapterBoot.current) {
+			chapterBoot.current = false;
+			if (chapterId === "sun") return;
+		}
+		const linked = linkedTarget.current;
+		linkedTarget.current = null;
+		const linkedHere = linked && (bodyById(linked).chapter ?? "sun") === chapterId;
+		engine.enter(chapterId);
+		const first = linkedHere ? linked : chapterById(chapterId).first;
+		setTargetId(first);
+		setOrbit(false);
+		setBoost(false);
+		setAutopilot(true);
+		setFocus(true);
+		setDismissed("");
+		setNavOpen(false);
+		setMapOpen(false);
+	}, [chapterId]);
 	const skipSurvey = (0, import_react.useRef)(true);
 	(0, import_react.useEffect)(() => {
 		if (skipSurvey.current) {
@@ -2963,16 +4896,15 @@ function Slipstream() {
 		localStorage.setItem(LOG, JSON.stringify(log));
 	}, [log]);
 	(0, import_react.useEffect)(() => {
+		if (!coach) return;
+		const timer = window.setTimeout(() => setCoach(""), 7e3);
+		return () => window.clearTimeout(timer);
+	}, [coach]);
+	(0, import_react.useEffect)(() => {
 		if (!banner) return;
 		const timer = window.setTimeout(() => setBanner(""), 3400);
 		return () => window.clearTimeout(timer);
 	}, [banner]);
-	(0, import_react.useEffect)(() => {
-		try {
-			if (localStorage.getItem(HELP) === "seen") return;
-		} catch {}
-		setLesson(0);
-	}, []);
 	const closeLesson = () => {
 		setLesson(null);
 		try {
@@ -2980,17 +4912,53 @@ function Slipstream() {
 		} catch {}
 	};
 	(0, import_react.useEffect)(() => {
-		if (lesson === null) return;
+		const id = new URLSearchParams(window.location.search).get("target");
+		if (!id || !isChartable(id)) return;
+		let ids = [];
+		try {
+			const raw = localStorage.getItem(SURVEY);
+			const parsed = raw ? JSON.parse(raw) : [];
+			if (Array.isArray(parsed)) ids = parsed.filter((item) => typeof item === "string");
+		} catch {}
+		const chapter = bodyById(id).chapter ?? "sun";
+		if (!chapterOpen(chapter, ids)) return;
+		if (chapter !== "sun") {
+			linkedTarget.current = id;
+			setChapterId(chapter);
+		}
+		setTargetId(id);
+		setFocus(true);
+		setAutopilot(true);
+	}, []);
+	(0, import_react.useEffect)(() => {
 		const onKey = (event) => {
 			if (event.key !== "Escape") return;
-			setLesson(null);
-			try {
-				localStorage.setItem(HELP, "seen");
-			} catch {}
+			if (lesson !== null) {
+				closeLesson();
+				return;
+			}
+			if (logOpen) {
+				setLogOpen(false);
+				return;
+			}
+			if (moreOpen) {
+				setMoreOpen(false);
+				return;
+			}
+			if (navOpen) {
+				setNavOpen(false);
+				return;
+			}
+			setPaused((value) => !value);
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [lesson]);
+	}, [
+		lesson,
+		logOpen,
+		moreOpen,
+		navOpen
+	]);
 	(0, import_react.useEffect)(() => {
 		const onChange = () => setFull(Boolean(document.fullscreenElement));
 		document.addEventListener("fullscreenchange", onChange);
@@ -3017,6 +4985,34 @@ function Slipstream() {
 		};
 	}, []);
 	(0, import_react.useEffect)(() => {
+		if (!gazeOn) {
+			engineRef.current?.setGaze(0, 0, false);
+			setGazeNote("");
+			return;
+		}
+		let stop = () => {};
+		let dead = false;
+		setGazeNote("Starting gaze");
+		startGaze({
+			onSample: (x, y) => engineRef.current?.setGaze(x, y, true),
+			onStatus: (text) => {
+				if (!dead) setGazeNote(text);
+			}
+		}).then((dispose) => {
+			if (dead) dispose();
+			else stop = dispose;
+		}).catch((err) => {
+			if (dead) return;
+			setGazeOn(false);
+			setBanner(err instanceof Error ? err.message : "Gaze could not start.");
+		});
+		return () => {
+			dead = true;
+			stop();
+			engineRef.current?.setGaze(0, 0, false);
+		};
+	}, [gazeOn]);
+	(0, import_react.useEffect)(() => {
 		const hide = () => setHint(false);
 		const timer = window.setTimeout(hide, 6400);
 		window.addEventListener("pointerdown", hide, { once: true });
@@ -3027,6 +5023,7 @@ function Slipstream() {
 		};
 	}, []);
 	const markerRefCbs = (0, import_react.useRef)({});
+	stationsRef.current = stations;
 	const markerRef = (id) => {
 		let cb = markerRefCbs.current[id];
 		if (!cb) {
@@ -3038,8 +5035,19 @@ function Slipstream() {
 		}
 		return cb;
 	};
+	function paintPlot(blips) {
+		const node = plotRef.current;
+		if (!node) return;
+		const draw = blips.map((blip) => {
+			const cls = blip.target ? "blip is-target" : blip.close ? "blip is-close" : "blip";
+			return `${stationsRef.current.includes(blip.id) ? `<circle cx="${(50 + blip.x).toFixed(1)}" cy="${(50 - blip.y).toFixed(1)}" r="${(blip.r + 1.6).toFixed(2)}" class="blip is-station" />` : ""}<circle cx="${(50 + blip.x).toFixed(1)}" cy="${(50 - blip.y).toFixed(1)}" r="${blip.r.toFixed(2)}" class="${cls}" />`;
+		}).join("");
+		if (node.dataset.draw === draw) return;
+		node.dataset.draw = draw;
+		node.innerHTML = draw;
+	}
 	function paintMarkers(markers) {
-		for (const body of BODIES) {
+		for (const body of bodiesIn(chapterId)) {
 			const el = markerRefs.current[body.id];
 			if (!el) continue;
 			const marker = markers.find((item) => item.id === body.id);
@@ -3048,39 +5056,151 @@ function Slipstream() {
 				continue;
 			}
 			el.hidden = false;
-			if (el.textContent !== marker.name) el.textContent = marker.name;
+			const label = charted.includes(body.id) ? `${marker.name} ✓` : marker.name;
+			if (el.textContent !== label) el.textContent = label;
 			el.style.left = `${(marker.x * 100).toFixed(1)}%`;
 			el.style.top = `${(marker.y * 100).toFixed(1)}%`;
 			el.classList.toggle("is-target", marker.primary);
+			el.classList.toggle("is-charted", charted.includes(body.id));
 		}
 	}
+	const chapter = chapterById(chapterId);
+	const chapterGoals = goalsIn(chapterId);
+	const chapterCharted = chapterGoals.filter((body) => charted.includes(body.id)).length;
+	const chapterReady = chapterDone(chapterId, charted);
+	const nextChapter = chapter.next ? chapterById(chapter.next) : null;
+	const nav = bodiesIn(chapterId).filter((body) => body.nav);
 	const target = bodyById(targetId);
 	const nearBody = nearId ? bodyById(nearId) : null;
 	const showBrief = Boolean(nearBody) && dismissed !== nearId;
-	const nextStop = NAV[((nearBody ? NAV.findIndex((body) => body.id === nearBody.id) : -1) + 1 + NAV.length) % NAV.length];
+	const nextAfter = (id) => {
+		const index = nav.findIndex((body) => body.id === id);
+		return nav[(index + 1 + nav.length) % nav.length];
+	};
+	const nextStop = nearBody ? nextAfter(nearBody.id) : void 0;
 	const engageOrbit = (id) => {
 		setTargetId(id);
 		setOrbit(true);
 		setBoost(false);
 		setAutopilot(false);
+		setFocus(false);
 	};
+	const pickOrbit = (id, level) => {
+		if (orbit && targetId === id && orbitLevel === level) {
+			setOrbit(false);
+			return;
+		}
+		setOrbitLevel(level);
+		engageOrbit(id);
+	};
+	const orbitLevels = (id) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "orbit-levels",
+		role: "group",
+		"aria-label": "Orbit height",
+		children: [
+			"Low",
+			"Mid",
+			"High"
+		].map((name, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+			type: "button",
+			"data-tip": `${name} orbit. Click the active height to leave.`,
+			"aria-pressed": orbit && targetId === id && orbitLevel === index,
+			onClick: () => pickOrbit(id, index),
+			children: name
+		}, name))
+	});
 	const flyNext = () => {
 		if (!nearBody || !nextStop) return;
 		setTargetId(nextStop.id);
 		setOrbit(false);
 		setBoost(false);
 		setAutopilot(true);
+		setFocus(true);
 		setDismissed(nearBody.id);
 	};
+	const logTask = (id) => {
+		setLog((prev) => prev.some((entry) => entry.id === id) ? prev : [...prev, {
+			id,
+			seconds: 0
+		}]);
+	};
+	const loadSupplies = () => {
+		setCargo(true);
+		setBanner("Supplies aboard. Found a station farther out.");
+	};
+	const foundStation = () => {
+		if (!nearBody || !cargo || stations.includes(nearBody.id)) return;
+		if (!LANE.includes(nearBody.id)) return;
+		const next = [...stations, nearBody.id];
+		setStations(next);
+		setCargo(false);
+		logTask("haul");
+		const open = LANE.every((stop) => next.includes(stop));
+		if (open) logTask("lane");
+		setBanner(open ? "The lane is open." : `Station founded at ${nearBody.name}. Load again at Earth.`);
+	};
+	const stepTour = () => {
+		const next = nextAfter(targetId);
+		if (!next || next.id === targetId) return;
+		setTargetId(next.id);
+		setOrbit(false);
+		setBoost(false);
+		setAutopilot(true);
+		setFocus(true);
+		if (nearId) setDismissed(nearId);
+		setNavOpen(false);
+	};
+	const startFirstFlight = () => {
+		tourRef.current = [...FIRST_FLIGHT];
+		setTourOn(true);
+		setHint(false);
+		setLesson(null);
+		setTargetId("earth");
+		setOrbit(false);
+		setBoost(false);
+		setAutopilot(true);
+		setFocus(true);
+		setPaused(false);
+		setCoach("First flight: Earth, then the Moon, then Mars.");
+	};
+	const shareChart = () => {
+		const url = new URL(window.location.href);
+		url.searchParams.set("target", targetId);
+		const text = `${chapterCharted} of ${chapterGoals.length} charted in Starward.`;
+		const full = `${text} ${url.toString()}`;
+		const done = () => setBanner("Link copied");
+		if (navigator.share) {
+			navigator.share({
+				title: "Starward",
+				text,
+				url: url.toString()
+			}).catch(() => {
+				navigator.clipboard?.writeText(full).then(done).catch(() => setBanner(full));
+			});
+			return;
+		}
+		navigator.clipboard?.writeText(full).then(done).catch(() => setBanner(full));
+	};
+	const aboveName = aboveSide < 0 ? "Above L" : aboveSide > 0 ? "Above R" : "Above";
 	const cycleView = () => {
-		const index = VIEWS.findIndex((item) => item.id === view);
-		setView(VIEWS[(index + 1) % VIEWS.length].id);
+		if (view === "above") {
+			if (aboveSide < 1) {
+				setAboveSide((side) => side < 0 ? 0 : 1);
+				return;
+			}
+			setAboveSide(-1);
+			setView("cockpit");
+			return;
+		}
+		const next = VIEWS[(VIEWS.findIndex((item) => item.id === view) + 1) % VIEWS.length].id;
+		if (next === "above") setAboveSide(-1);
+		setView(next);
 	};
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		ref: stageRef,
 		className: "stage",
 		"data-lesson": lesson === null ? void 0 : lesson,
-		"aria-label": "Slipstream",
+		"aria-label": "Starward",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "viewport",
 			children: [
@@ -3091,13 +5211,27 @@ function Slipstream() {
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "sr-only",
-					children: "Fly the solar system. Drag the view to look. Horizon levels the nose. Go flies to the place you pick. Switch between cockpit, chase, and wing. Full screen fills the display. A and D steer. W and S pitch."
+					children: "Fly from the Sun to the near stars, the Milky Way, and the galaxy clusters beyond. Switch between cockpit, chase, either wing, and above. Full screen fills the display. A and D steer. W and S pitch. Space warps. Escape pauses."
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: "sr-only",
+					"aria-live": "polite",
+					children: [
+						paused ? "Paused. " : "",
+						target.name,
+						". ",
+						chapterCharted,
+						" of ",
+						chapterGoals.length,
+						" places charted."
+					]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					className: "markers",
 					"aria-hidden": "true",
-					children: BODIES.map((body) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					children: bodiesIn(chapterId).map((body) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 						className: "marker",
+						"data-id": body.id,
 						ref: markerRef(body.id)
 					}, body.id))
 				}),
@@ -3106,67 +5240,168 @@ function Slipstream() {
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
 							className: "wordmark",
-							children: "Slipstream"
+							children: "Starward"
 						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 							className: "kicker",
-							children: charted.length >= GOAL_COUNT ? "System charted" : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "chart",
-									children: [
-										charted.length,
-										" of ",
-										GOAL_COUNT
-									]
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: "chapter-name",
+									"aria-expanded": mapOpen,
+									onClick: () => setMapOpen((open) => !open),
+									children: chapter.name
 								}),
-								" ",
-								"places charted"
-							] })
+								" · ",
+								chapterReady && !nextChapter ? "Journey charted" : chapterReady ? "Charted" : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "chart",
+										children: [
+											chapterCharted,
+											" of ",
+											chapterGoals.length
+										]
+									}),
+									" ",
+									"places charted",
+									chapterId === "sun" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+										" · ",
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+											className: "chart",
+											children: [
+												LANE.filter((id) => stations.includes(id)).length,
+												" of ",
+												LANE.length
+											]
+										}),
+										" ",
+										"stations"
+									] }) : null
+								] })
+							]
 						}),
+						mapOpen ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+							className: "chapter-menu",
+							children: CHAPTERS.map((item) => {
+								const open = chapterOpen(item.id, charted);
+								return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									disabled: !open,
+									"aria-current": item.id === chapterId ? "true" : void 0,
+									onClick: () => {
+										setMapOpen(false);
+										if (open && item.id !== chapterId) setChapterId(item.id);
+									},
+									children: [item.name, /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: !open ? "Locked" : chapterDone(item.id, charted) ? "Charted" : "Open" })]
+								}) }, item.id);
+							})
+						}) : null,
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "top-actions",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								className: "help-btn",
-								"data-hud": true,
-								onClick: () => {
-									setLesson(0);
-									setLogOpen(false);
-								},
-								children: "Help"
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								className: "help-btn",
-								"data-hud": true,
-								"aria-pressed": logOpen,
-								onClick: () => {
-									setLogOpen((open) => !open);
-									setLesson(null);
-								},
-								children: "Log"
-							})]
+							children: [
+								nextChapter && chapterReady ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: "onward",
+									onClick: () => setChapterId(nextChapter.id),
+									children: "Onward"
+								}) : null,
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: "help-btn",
+									"data-hud": true,
+									onClick: () => {
+										setLesson(0);
+										setLogOpen(false);
+									},
+									children: "Help"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									className: "help-btn",
+									"data-hud": true,
+									"aria-pressed": logOpen,
+									onClick: () => {
+										setLogOpen((open) => !open);
+										setLesson(null);
+									},
+									children: "Log"
+								})
+							]
 						})
 					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "readout",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							ref: warpRef,
-							className: "warp",
-							children: "1.58"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-							className: "warp-unit",
-							children: [
-								"warp ",
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "boost-flag",
-									children: "· boost"
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "orbit-flag",
-									children: "· orbit"
-								})
-							]
-						})]
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								ref: warpRef,
+								className: "warp",
+								children: "1.58"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+								className: "warp-unit",
+								children: [
+									"warp ",
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "boost-flag",
+										children: "· boost"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "orbit-flag",
+										children: "· orbit"
+									})
+								]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								ref: captureRef,
+								className: "capture-read"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "dash",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Dist" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", {
+										ref: distRef,
+										children: "—"
+									})] }),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Spd" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", {
+										ref: spdRef,
+										children: "0"
+									})] }),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Hold" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: cargo ? "Full" : "Empty" })] }),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Nose" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", {
+										ref: noseRef,
+										children: "0°"
+									})] })
+								]
+							})
+						]
 					})]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+					className: "plot",
+					viewBox: "0 0 100 100",
+					"aria-label": "Bodies around the ship. Ahead is up.",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", {
+							className: "plot-ring",
+							cx: "50",
+							cy: "50",
+							r: "46"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", {
+							className: "plot-ring",
+							cx: "50",
+							cy: "50",
+							r: "23"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", {
+							className: "plot-axis",
+							d: "M50 8v84M8 50h84"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { ref: plotRef }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", {
+							className: "plot-ship",
+							d: "M50 42 L54 58 L50 54 L46 58 Z"
+						})
+					]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "reticle",
@@ -3270,16 +5505,29 @@ function Slipstream() {
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "chrome",
 					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-							className: hint && lesson === null ? "hint" : "hint is-hidden",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: hint && lesson === null && !coach ? "hint" : "hint is-hidden",
+							children: charted.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Earth is selected. Press Go." }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								className: "hint-go",
+								onClick: startFirstFlight,
+								children: "First flight"
+							})] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "md:hidden",
 								children: "Drag to look. Go flies you there."
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "hidden md:inline",
-								children: "Move to look. Horizon levels the nose. Go flies to the place you pick."
-							})]
+								children: "Drag to look. A click nudges the nose. Go flies to the place you pick."
+							})] })
 						}),
+						coach ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "hint",
+							children: coach
+						}) : null,
+						gazeNote ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "status",
+							children: gazeNote
+						}) : null,
 						alert ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "status",
 							children: alert
@@ -3306,31 +5554,44 @@ function Slipstream() {
 									className: "facts",
 									children: [
 										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: "Distance" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: nearBody.place ?? (nearBody.au === 0 ? "Center" : `${nearBody.au.toFixed(2)} AU`) })] }),
-										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: nearBody.parent ? "Orbit" : "Year" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: nearBody.year })] }),
-										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: nearBody.parent ? "Orbits" : "Moons" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: nearBody.parent ? bodyById(nearBody.parent).name : nearBody.moons })] })
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: nearBody.form ? "Kind" : nearBody.parent ? "Orbit" : "Year" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: nearBody.year })] }),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: nearBody.form ? "Note" : nearBody.parent ? "Orbits" : "Moons" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: nearBody.form ? nearBody.moons : nearBody.parent ? bodyById(nearBody.parent).name : nearBody.moons })] })
 									]
 								}),
 								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 									className: "brief-actions",
-									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-										type: "button",
-										className: "brief-orbit",
-										"aria-pressed": orbit && targetId === nearBody.id,
-										onClick: () => {
-											if (orbit && targetId === nearBody.id) setOrbit(false);
-											else engageOrbit(nearBody.id);
-										},
-										children: orbit && targetId === nearBody.id ? "Leave orbit" : "Orbit"
-									}), nextStop && nextStop.id !== nearBody.id ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-										type: "button",
-										className: "brief-next",
-										onClick: flyNext,
-										children: ["Next · ", nextStop.name]
-									}) : null]
+									children: [
+										orbitLevels(nearBody.id),
+										orbit && targetId === nearBody.id ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											type: "button",
+											className: "brief-orbit",
+											"aria-pressed": true,
+											onClick: () => setOrbit(false),
+											children: "Leave"
+										}) : null,
+										nextStop && nextStop.id !== nearBody.id ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+											type: "button",
+											className: "brief-next",
+											onClick: flyNext,
+											children: ["Next · ", nextStop.name]
+										}) : null,
+										nearBody.id === YARD && !cargo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											type: "button",
+											className: "brief-next",
+											onClick: loadSupplies,
+											children: "Load supplies"
+										}) : null,
+										cargo && LANE.includes(nearBody.id) && !stations.includes(nearBody.id) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											type: "button",
+											className: "brief-next",
+											onClick: foundStation,
+											children: "Found station"
+										}) : null
+									]
 								}),
 								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 									className: "brief-note",
-									children: "Orbits keep their real order. Travel distances are compressed so you can cross the system."
+									children: stations.includes(nearBody.id) ? "A station holds this lane. Supplies still load at Earth." : cargo ? "Supplies are aboard. Found a station at the Moon, Mars, Ceres, Europa, Titan, or Triton." : nearBody.id === YARD ? "Earth is the yard. Load supplies, then carry them out to found a station." : "Orbits keep their real order. Travel distances are compressed so you can cross the system."
 								})
 							]
 						}) : null
@@ -3345,104 +5606,123 @@ function Slipstream() {
 				children: [
 					moreOpen ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "more-panel",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "actions",
-							children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									"data-tip": "Burn harder for a while. Leaves an orbit.",
-									"aria-pressed": boost,
-									onClick: () => {
-										setBoost((value) => !value);
-										setOrbit(false);
-									},
-									children: "Boost"
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									"data-tip": "Circle the place you picked. Replaces the previous orbit.",
-									"aria-pressed": orbit,
-									onClick: () => {
-										if (orbit) setOrbit(false);
-										else engageOrbit(targetId);
-									},
-									children: "Orbit"
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									"data-tip": "Level the nose",
-									"aria-pressed": noseLevel,
-									"aria-label": "Level the nose to the horizon",
-									onClick: () => engineRef.current?.level(),
-									children: "Horizon"
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									className: "icon-btn",
-									"data-tip": muted ? "Turn the engine sound on" : "Turn the engine sound off",
-									"aria-pressed": !muted,
-									"aria-label": muted ? "Unmute" : "Mute",
-									onClick: () => setMuted((value) => !value),
-									children: muted ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VolumeX, {
-										size: 16,
-										strokeWidth: 1.75
-									}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Volume2, {
-										size: 16,
-										strokeWidth: 1.75
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "actions",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										"data-tip": "Burn harder for a while. Leaves an orbit.",
+										"aria-pressed": boost,
+										onClick: () => {
+											setBoost((value) => !value);
+											setOrbit(false);
+										},
+										children: "Boost"
+									}),
+									orbitLevels(targetId),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										"data-tip": "Level the nose",
+										"aria-pressed": noseLevel,
+										"aria-label": "Level the nose to the horizon",
+										onClick: () => engineRef.current?.level(),
+										children: "Horizon"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										className: "icon-btn",
+										"data-tip": muted ? "Turn the engine sound on" : "Turn the engine sound off",
+										"aria-pressed": !muted,
+										"aria-label": muted ? "Unmute" : "Mute",
+										onClick: () => setMuted((value) => !value),
+										children: muted ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VolumeX, {
+											size: 16,
+											strokeWidth: 1.75
+										}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Volume2, {
+											size: 16,
+											strokeWidth: 1.75
+										})
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										"data-tip": "Steer by looking. The camera stays on this device.",
+										"aria-pressed": gazeOn,
+										onClick: () => setGazeOn((on) => !on),
+										children: "Gaze"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										"data-tip": full ? "Leave full screen" : "Fill the screen",
+										"aria-pressed": full,
+										onClick: toggleFull,
+										children: full ? "Exit" : "Full"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										"data-tip": "Copy a link to this place and your chart count",
+										onClick: shareChart,
+										children: "Share"
 									})
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									"data-tip": full ? "Leave full screen" : "Fill the screen",
-									"aria-pressed": full,
-									onClick: toggleFull,
-									children: full ? "Exit" : "Full"
-								})
-							]
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-							className: "slider-row density-row",
-							"data-tip": "How many stars fill the sky.",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								id: "density-label",
-								className: "slider-label",
-								children: "Stars"
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Slider, {
-								className: "slider",
-								"aria-labelledby": "density-label",
-								min: 0,
-								max: 1,
-								step: .005,
-								value: [density],
-								onValueChange: ([value]) => setDensity(clamp01(value ?? 0)),
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SliderTrack, {
-									className: "slider-track",
-									children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SliderRange, { className: "slider-range" })
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SliderThumb, {
-									className: "slider-thumb",
-									"aria-label": "Stars",
-									children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {})
+								]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "more-note",
+								children: "Sizes and years are real. Distances are compressed so a flight can cross them."
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "slider-row density-row",
+								"data-tip": "How many stars fill the sky.",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									id: "density-label",
+									className: "slider-label",
+									children: "Stars"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Slider, {
+									className: "slider",
+									"aria-labelledby": "density-label",
+									min: 0,
+									max: 1,
+									step: .005,
+									value: [density],
+									onValueChange: ([value]) => setDensity(clamp01(value ?? 0)),
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SliderTrack, {
+										className: "slider-track",
+										children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SliderRange, { className: "slider-range" })
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SliderThumb, {
+										className: "slider-thumb",
+										"aria-label": "Stars",
+										children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {})
+									})]
 								})]
-							})]
-						})]
+							})
+						]
 					}) : null,
 					navOpen ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 						className: "nav-list",
-						children: navSections(NAV).map((section) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+						children: navSections(nav).map((section) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
 							className: "nav-section",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 								className: "nav-group",
 								children: section.group
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { children: section.bodies.map((body) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("ul", { children: [section.bodies.map((body) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 								type: "button",
 								"aria-current": body.id === targetId ? "true" : void 0,
 								onClick: () => {
 									setTargetId(body.id);
 									setOrbit(false);
 									setAutopilot(false);
+									setFocus(true);
 									setNavOpen(false);
 								},
-								children: [body.name, /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: charted.includes(body.id) ? "Charted" : body.tag ? body.tag : body.place ? "Moon" : body.au === 0 ? "Star" : `${body.au.toFixed(2)} AU` })]
-							}) }, body.id)) })]
+								children: [body.name, /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: charted.includes(body.id) ? "Charted" : body.tag ? body.tag : body.place ? body.place : body.au === 0 ? "Star" : `${body.au.toFixed(2)} AU` })]
+							}) }, body.id)), section.group === "Star" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								className: "nav-next",
+								"data-tip": "Fly to the next place",
+								"aria-label": `Next, fly to ${nextAfter(targetId)?.name ?? "the next place"}`,
+								onClick: stepTour,
+								children: "Next"
+							}) }) : null] })]
 						}, section.group))
 					}) : null,
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -3500,10 +5780,10 @@ function Slipstream() {
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 								type: "button",
 								className: "view-cycle",
-								"data-tip": VIEWS.find((item) => item.id === view)?.tip,
-								"aria-label": `Camera is ${VIEWS.find((item) => item.id === view)?.label}. Switch camera.`,
+								"data-tip": view === "above" ? aboveSide < 0 ? "Overhead, from the left" : aboveSide > 0 ? "Overhead, from the right" : "Overhead, from the center" : VIEWS.find((item) => item.id === view)?.tip,
+								"aria-label": `Camera is ${view === "above" ? aboveName : VIEWS.find((item) => item.id === view)?.label}. Switch camera.`,
 								onClick: cycleView,
-								children: VIEWS.find((item) => item.id === view)?.label
+								children: view === "above" ? aboveName : VIEWS.find((item) => item.id === view)?.label
 							}),
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 								type: "button",

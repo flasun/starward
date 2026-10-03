@@ -26,7 +26,7 @@ export const TASKS = [
   {
     id: "wing",
     name: "Hold the wing",
-    how: "Keep a moon centered in the wing camera for four seconds.",
+    how: "Keep a moon centered in either wing camera for four seconds.",
   },
   {
     id: "shadow",
@@ -37,6 +37,16 @@ export const TASKS = [
     id: "eclipse",
     name: "Eclipse",
     how: "Line a moon up so it crosses the Sun.",
+  },
+  {
+    id: "haul",
+    name: "First station",
+    how: "Trade goods until you can afford a station, then deploy it in open space.",
+  },
+  {
+    id: "lane",
+    name: "Open the lane",
+    how: "Deploy three stations. Each one keeps paying while you fly.",
   },
 ] as const;
 
@@ -161,7 +171,7 @@ export function stepTasks(memory: TaskMemory, ctx: TaskContext): TaskId | null {
   }
 
   if (!memory.done.wing) {
-    if (ctx.view !== "wing") memory.wing = 0;
+    if (ctx.view !== "left" && ctx.view !== "right" && ctx.view !== "wing") memory.wing = 0;
     else {
       let held = false;
       for (const body of BODIES) {

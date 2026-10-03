@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Slipstream";
+const APP_NAME = "Starward";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -11,7 +11,7 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: APP_NAME },
-      { name: "description", content: "Fly a real solar system at warp speed. Steer, chart planets, moons, and dwarf planets, and read what you reach." },
+      { name: "description", content: "Fly a real solar system, then the near stars, the Milky Way, and the clusters beyond. Chart each scale, then warp onward." },
       { name: "theme-color", content: "#07080b" },
     ],
     links: [
@@ -27,6 +27,7 @@ export const Route = createRootRoute({
         <HeadContent />
       </head>
       <body>
+        <noscript>Starward needs JavaScript and WebGL to fly. The chart is a compressed model of real places, from the Sun out to the galaxy clusters.</noscript>
         <PreviewHostBridge />
         <AuthProvider>
           <Outlet />

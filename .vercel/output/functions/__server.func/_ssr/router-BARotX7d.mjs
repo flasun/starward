@@ -1,10 +1,10 @@
 import { i as __toESM, n as __exportAll } from "../_runtime.mjs";
 import { a as require_jsx_runtime, o as require_react } from "../_libs/@radix-ui/react-collection+[...].mjs";
-import { _ as useRouter, f as createRouter, g as createRootRoute, h as createFileRoute, l as Scripts, m as lazyRouteComponent, p as Outlet, u as HeadContent } from "../_libs/@tanstack/react-router+[...].mjs";
+import { _ as createFileRoute, d as Scripts, f as HeadContent, g as lazyRouteComponent, h as Outlet, m as createRouter, v as createRootRoute, y as useRouter } from "../_libs/@tanstack/react-router+[...].mjs";
 import { r as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/router-FEyh6VRJ.js
-var router_FEyh6VRJ_exports = /* @__PURE__ */ __exportAll({ getRouter: () => getRouter });
+//#region node_modules/.nitro/vite/services/ssr/assets/router-BARotX7d.js
+var router_BARotX7d_exports = /* @__PURE__ */ __exportAll({ getRouter: () => getRouter });
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var FALLBACK_MESSAGE = "An unexpected error occurred. Try reloading the page.";
@@ -298,8 +298,8 @@ function PreviewHostBridge() {
 	}, [router]);
 	return null;
 }
-var styles_default = "/assets/styles-DqMmZI0V.css";
-var APP_NAME = "Slipstream";
+var styles_default = "/assets/styles-bqA5-1fB.css";
+var APP_NAME = "Starward";
 var Route$1 = createRootRoute({
 	head: () => ({
 		meta: [
@@ -311,7 +311,7 @@ var Route$1 = createRootRoute({
 			{ title: APP_NAME },
 			{
 				name: "description",
-				content: "Fly a real solar system at warp speed. Steer, chart planets, moons, and dwarf planets, and read what you reach."
+				content: "Fly a real solar system, then the near stars, the Milky Way, and the clusters beyond. Chart each scale, then warp onward."
 			},
 			{
 				name: "theme-color",
@@ -342,13 +342,14 @@ var Route$1 = createRootRoute({
 		lang: "en",
 		suppressHydrationWarning: true,
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("head", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HeadContent, {}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("body", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("noscript", { children: "Starward needs JavaScript and WebGL to fly. The chart is a compressed model of real places, from the Sun out to the galaxy clusters." }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PreviewHostBridge, {}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AuthProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Outlet, {}) }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Scripts, {})
 		] })]
 	})
 });
-var $$splitComponentImporter = () => import("./routes-_vX0WmUx.mjs");
+var $$splitComponentImporter = () => import("./routes-BdV6IV6f.mjs");
 var rootRouteChildren = { IndexRoute: createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter, "component") }).update({
 	id: "/",
 	path: "/",
@@ -362,4 +363,4 @@ function getRouter() {
 	});
 }
 //#endregion
-export { getRouter, router_FEyh6VRJ_exports as t };
+export { getRouter, router_BARotX7d_exports as t };

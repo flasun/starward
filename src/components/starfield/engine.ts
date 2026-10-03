@@ -9,9 +9,9 @@ import {
   warpFactor,
 } from "@/components/starfield/math";
 import {
-  BODIES,
   EARTH_ORBIT,
   type BodyDef,
+  bodiesIn,
   bodyById,
   bodyPosition,
   cameraForward,
@@ -27,7 +27,7 @@ import { createTaskState, stepTasks, type TaskMemory } from "@/components/starfi
  * Stick +X is right, stick +Y is down. KeyA is stick −X so yaw increases.
  */
 
-export type CameraView = "cockpit" | "chase" | "wing";
+export type CameraView = "cockpit" | "chase" | "left" | "right" | "above";
 
 export type StarfieldParams = {
   speed: number;
@@ -37,8 +37,27 @@ export type StarfieldParams = {
   reducedMotion: boolean;
   targetId: string;
   autopilot: boolean;
+  focus: boolean;
   orbit: boolean;
+  orbitLevel: number;
   view: CameraView;
+  aboveSide: -1 | 0 | 1;
+  paused: boolean;
+  depots: { x: number; z: number }[];
+};
+
+export type PlotBlip = {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  r: number;
+  target: boolean;
+  close: boolean;
+  ship?: boolean;
+  heading?: number;
+  ring?: boolean;
+  depot?: boolean;
 };
 
 export type FrameMarker = {
@@ -61,17 +80,25 @@ export type StarfieldHooks = {
     leveling: boolean;
     boosting: boolean;
     rangeText: string;
+    speedText: string;
     targetId: string;
     nearId: string;
+    chartId: string;
     alert: string;
     markers: FrameMarker[];
+    plot: PlotBlip[];
     locked: boolean;
     orbiting: boolean;
+    captureText: string;
+    shipX: number;
+    shipZ: number;
   }) => void;
   onError: (message: string) => void;
   onCancelAutopilot: () => void;
   onCancelOrbit: () => void;
   onToggleOrbit: () => void;
+  onFocus: (id: string) => void;
+  onCancelFocus: () => void;
   onBeginLap: (id: string) => void;
   onEndLap: () => void;
   onTask: (id: string, seconds: number) => void;
@@ -428,6 +455,18 @@ void main() {
       cities = smoothstep(0.8, 0.95, noise(vec2(lon * 2.8, lat * 2.1))) * land;
     } else if (vStyle > 2.5 && vStyle < 3.5) {
       bands = sin(vUv.y * 10.0) * 0.04;
+    } else if (vStyle > 3.5 && vStyle < 4.5) {
+      float lon = atan(vUv.x, max(nz, 0.2));
+      float lat = vUv.y * 2.2;
+      float grain = noise(vec2(lon * 2.2, lat * 1.6));
+      float crater = smoothstep(0.62, 0.86, noise(vec2(lon * 4.6 + 1.7, lat * 3.4)));
+      tint *= 0.76 + grain * 0.38;
+      tint *= 1.0 - crater * 0.42;
+    } else if (vStyle > 4.5 && vStyle < 5.5) {
+      float lon = atan(vUv.x, max(nz, 0.2));
+      float lat = vUv.y * 1.8;
+      float dark = smoothstep(0.46, 0.76, noise(vec2(lon * 1.35 + 0.6, lat)));
+      tint = mix(tint, tint * vec3(0.4, 0.2, 0.14), dark * 0.7);
     }
     vec3 lit = mix(night, tint, day);
     lit += vec3(1.0, 0.86, 0.62) * bands * day;
@@ -437,7 +476,11 @@ void main() {
       lit *= 1.0 - band * (0.28 + 0.5 * abs(L.y));
     }
     float rim = pow(1.0 - nz, 1.7);
-    lit += mix(vTint, vec3(0.75, 0.86, 1.0), 0.35) * rim * day * 0.5;
+    lit += mix(vTint, vec3(0.8, 0.9, 1.0), 0.4) * rim * day * 0.62;
+    if (vStyle > 0.9 && vStyle < 1.15) {
+      float spot = exp(-pow((vUv.x - 0.32) * 3.4, 2.0) - pow((vUv.y + 0.18) * 6.2, 2.0));
+      lit = mix(lit, vec3(0.78, 0.3, 0.16), spot * day * 0.82);
+    }
     vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
     float spec = pow(max(dot(n, H), 0.0), 46.0) * ocean * day;
     lit += vec3(0.75, 0.88, 1.0) * spec * 0.4;
@@ -482,7 +525,7 @@ in float vGlow;
 uniform float uBoost;
 out vec4 fragColor;
 void main() {
-  vec3 col = vColor + vec3(0.40, 0.58, 0.95) * vGlow * (0.4 + uBoost);
+  vec3 col = vColor + vec3(0.55, 0.82, 1.0) * vGlow * (0.65 + uBoost * 1.35);
   fragColor = vec4(min(col, vec3(1.0)), 1.0);
 }
 `;
@@ -517,39 +560,46 @@ function shipMesh(): Float32Array {
   ) => {
     for (const p of [a, b, c]) v.push(p[0], p[1], p[2], color[0], color[1], color[2], glow);
   };
-  const nose: [number, number, number] = [0, 0.04, 2.55];
-  const spine: [number, number, number] = [0, 0.34, 0.25];
-  const keel: [number, number, number] = [0, -0.2, 0.15];
-  const right: [number, number, number] = [1.85, 0.02, -0.45];
-  const left: [number, number, number] = [-1.85, 0.02, -0.45];
-  const tailTop: [number, number, number] = [0, 0.18, -1.55];
-  const tailBot: [number, number, number] = [0, -0.14, -1.55];
-  const top: readonly [number, number, number] = [0.86, 0.89, 0.94];
-  const hull: readonly [number, number, number] = [0.62, 0.66, 0.74];
-  const shade: readonly [number, number, number] = [0.4, 0.44, 0.52];
-  const belly: readonly [number, number, number] = [0.22, 0.24, 0.3];
-  const glass: readonly [number, number, number] = [0.78, 0.86, 0.96];
-  push(nose, right, spine, top);
-  push(nose, spine, left, top);
+  const nose: [number, number, number] = [0, 0.05, 2.75];
+  const spine: [number, number, number] = [0, 0.36, 0.15];
+  const keel: [number, number, number] = [0, -0.22, 0.08];
+  const right: [number, number, number] = [1.55, 0.05, -0.15];
+  const left: [number, number, number] = [-1.55, 0.05, -0.15];
+  const tipR: [number, number, number] = [2.05, 0.22, -0.72];
+  const tipL: [number, number, number] = [-2.05, 0.22, -0.72];
+  const tailTop: [number, number, number] = [0, 0.2, -1.6];
+  const tailBot: [number, number, number] = [0, -0.16, -1.5];
+  const white: readonly [number, number, number] = [0.9, 0.93, 0.97];
+  const hull: readonly [number, number, number] = [0.58, 0.64, 0.72];
+  const shade: readonly [number, number, number] = [0.34, 0.38, 0.46];
+  const belly: readonly [number, number, number] = [0.16, 0.18, 0.24];
+  const glass: readonly [number, number, number] = [0.55, 0.84, 1];
+  const stripe: readonly [number, number, number] = [0.72, 0.9, 1];
+  const engine: readonly [number, number, number] = [0.65, 0.88, 1];
+  push(nose, right, spine, white);
+  push(nose, spine, left, white);
   push(spine, right, tailTop, hull);
   push(spine, tailTop, left, hull);
+  push(right, tipR, tailTop, white);
+  push(left, tailTop, tipL, white);
   push(nose, keel, right, shade);
   push(nose, left, keel, shade);
   push(keel, tailBot, right, belly);
   push(keel, left, tailBot, belly);
-  push(tailTop, [0.42, -0.02, -1.55], tailBot, belly);
-  push(tailTop, tailBot, [-0.42, -0.02, -1.55], belly);
-  const peak: [number, number, number] = [0, 0.58, 0.22];
-  const brow: [number, number, number] = [0, 0.14, 1.15];
-  push(brow, [0.26, 0.16, 0.18], peak, glass);
-  push(brow, peak, [-0.26, 0.16, 0.18], glass);
-  const lamp = (x: number) => {
-    const y = 0.02;
-    const z = -1.72;
-    push([x - 0.2, y + 0.1, z], [x + 0.2, y + 0.1, z], [x, y - 0.12, z], [0.55, 0.7, 0.95], 1);
-  };
-  lamp(-0.48);
-  lamp(0.48);
+  push(right, tailBot, tipR, shade);
+  push(left, tipL, tailBot, shade);
+  push(tailTop, [0.36, 0.02, -1.5], tailBot, belly);
+  push(tailTop, tailBot, [-0.36, 0.02, -1.5], belly);
+  const peak: [number, number, number] = [0, 0.62, 0.35];
+  const brow: [number, number, number] = [0, 0.16, 1.28];
+  push(brow, [0.24, 0.18, 0.25], peak, glass, 0.4);
+  push(brow, peak, [-0.24, 0.18, 0.25], glass, 0.4);
+  push([0, 0.4, 0.95], [0.055, 0.34, -0.55], [0, 0.32, -0.55], stripe, 0.9);
+  push([0, 0.4, 0.95], [0, 0.32, -0.55], [-0.055, 0.34, -0.55], stripe, 0.9);
+  push([-0.5, 0.08, -1.42], [-0.28, 0.08, -1.42], [-0.39, 0.02, -1.78], engine, 1);
+  push([0.28, 0.08, -1.42], [0.5, 0.08, -1.42], [0.39, 0.02, -1.78], engine, 1);
+  push([1.92, 0.2, -0.58], tipR, [1.98, 0.16, -0.78], engine, 1);
+  push(tipL, [-1.92, 0.2, -0.58], [-1.98, 0.16, -0.78], engine, 1);
   return new Float32Array(v);
 }
 
@@ -563,6 +613,128 @@ function holdRadius(body: BodyDef): number {
   if (body.speck) return 24;
   if (body.parent) return Math.max(16, vis * 3.2 + 8);
   return Math.max(30, vis * 3.6 + 12);
+}
+
+function skinRadius(body: BodyDef): number {
+  const vis = visualRadius(body);
+  if (body.id === "sun") return vis * 1.08;
+  if (body.speck) return 2.2;
+  return Math.max(vis * 1.08, 2.4);
+}
+
+function formatRange(dist: number, chapter: string): string {
+  if (chapter !== "sun") {
+    if (dist < 48) return "Here";
+    const hop = dist / 520;
+    return `${hop.toFixed(hop < 10 ? 2 : 1)}× hop`;
+  }
+  const km = (dist / EARTH_ORBIT) * 149_597_870;
+  if (km < 800_000) {
+    if (km < 1000) return `${Math.max(1, Math.round(km))} km`;
+    return `${Math.round(km / 1000)}k km`;
+  }
+  const au = dist / EARTH_ORBIT;
+  return `${au.toFixed(au < 10 ? 2 : 1)} AU`;
+}
+
+function plotSystem(
+  contacts: { id: string; name: string; wx: number; wz: number; orbit: number; target: boolean; close: boolean }[],
+  shipX: number,
+  shipZ: number,
+  yaw: number,
+  depots: { x: number; z: number }[],
+): PlotBlip[] {
+  let reach = 80;
+  for (const item of contacts) reach = Math.max(reach, Math.hypot(item.wx, item.wz));
+  for (const depot of depots) reach = Math.max(reach, Math.hypot(depot.x, depot.z));
+  reach = Math.max(reach, Math.hypot(shipX, shipZ), 1);
+  const place = (wx: number, wz: number) => {
+    const dist = Math.hypot(wx, wz);
+    if (dist < 0.001) return { x: 0, y: 0 };
+    const radius = (Math.log1p(dist) / Math.log1p(reach)) * 44;
+    return { x: (wx / dist) * radius, y: (wz / dist) * radius };
+  };
+  const rings = new Set<number>();
+  for (const item of contacts) {
+    if (item.orbit > 8) rings.add(Math.round(place(item.orbit, 0).x * 10) / 10);
+  }
+  const marks: PlotBlip[] = [...rings].map((r) => ({
+    id: `ring-${r}`,
+    name: "",
+    x: 0,
+    y: 0,
+    r,
+    target: false,
+    close: false,
+    ring: true,
+  }));
+  for (const item of contacts) {
+    const at = place(item.wx, item.wz);
+    marks.push({
+      id: item.id,
+      name: item.name,
+      x: at.x,
+      y: at.y,
+      r: item.id === "sun" ? 1.8 : item.target ? 1.55 : 0.85,
+      target: item.target,
+      close: item.close,
+    });
+  }
+  depots.forEach((depot, index) => {
+    const at = place(depot.x, depot.z);
+    marks.push({
+      id: `depot-${index}`,
+      name: "Station",
+      x: at.x,
+      y: at.y,
+      r: 1.15,
+      target: false,
+      close: false,
+      depot: true,
+    });
+  });
+  const ship = place(shipX, shipZ);
+  marks.push({
+    id: "ship",
+    name: "You",
+    x: ship.x,
+    y: ship.y,
+    r: 0,
+    target: false,
+    close: false,
+    ship: true,
+    heading: yaw,
+  });
+  return marks;
+}
+
+const CAPTURE_IDS = new Set(["earth", "jupiter", "saturn"]);
+
+function captureWell(body: BodyDef) {
+  const R = visualRadius(body);
+  return {
+    floor: R * 1.05,
+    low1: R * 3.2,
+    mid1: R * 8,
+    high1: R * 18,
+    soi: R * 22,
+    gm: 100 * R * 13,
+  };
+}
+
+function captureBand(dist: number, well: ReturnType<typeof captureWell>): "low" | "mid" | "high" | "edge" {
+  if (dist < well.low1) return "low";
+  if (dist < well.mid1) return "mid";
+  if (dist <= well.high1) return "high";
+  return "edge";
+}
+
+function orbitLevelRadius(body: BodyDef, level: number): number {
+  const skin = skinRadius(body);
+  const mid = holdRadius(body);
+  if (level <= 0) return Math.max(skin * 1.45, skin + 1.2);
+  if (level >= 2) return mid * 2.2;
+  return mid;
 }
 
 function orbitTangent(rx: number, ry: number, rz: number): { x: number; y: number; z: number } {
@@ -647,6 +819,16 @@ export class StarfieldEngine {
   private yaw = 0;
   private pitch = 0;
   private orbitSign = 1;
+  private velX = 0;
+  private velY = 0;
+  private velZ = 0;
+  private inserting = false;
+  private insertSeeded = false;
+  private captureHold = 0;
+  private captureRadius = 0;
+  private captureText = "";
+  private captureAbort = "";
+  private alertUntil = 0;
   private orbitId = "";
   private lapFor = "";
   private lapSkip = "";
@@ -682,6 +864,27 @@ export class StarfieldEngine {
   private pointerY = 0;
   private hasPointer = false;
   private hudPointer = -1;
+  private holdLook = false;
+  private holdX = 0;
+  private holdY = 0;
+  private wasFocus = false;
+  private tapAt = 0;
+  private tapX = 0;
+  private tapY = 0;
+  private downX = 0;
+  private downY = 0;
+  private downMoved = false;
+  private dragging = false;
+  private dragX = 0;
+  private dragY = 0;
+  private guide = false;
+  private guideX = 0;
+  private guideY = 0;
+  private pendingGuide: { x: number; y: number; at: number } | null = null;
+  private gazeOn = false;
+  private gazeX = 0;
+  private gazeY = 0;
+  private picks: { id: string; x: number; y: number; rad: number }[] = [];
   private leveling = false;
   private audioAcc = 0;
   private lastWarp = "";
@@ -690,10 +893,13 @@ export class StarfieldEngine {
   private mobile = false;
   private sized = false;
   private shipX = 0;
+  private chapter = "sun";
   private shipY = 6;
   private shipZ = 0;
   private placed = false;
   private nearId = "";
+  private chartId = "";
+  private plot: PlotBlip[] = [];
   private alert = "";
   private planets: WebGLProgram | null = null;
   private planetVao: WebGLVertexArrayObject | null = null;
@@ -750,6 +956,13 @@ export class StarfieldEngine {
 
   level(): void {
     this.leveling = true;
+  }
+
+  /** Smoothed look from the webcam. Does not count as a steer that leaves an orbit. */
+  setGaze(x: number, y: number, on: boolean): void {
+    this.gazeOn = on;
+    this.gazeX = clamp(x, -1, 1);
+    this.gazeY = clamp(y, -1, 1);
   }
 
   destroy(): void {
@@ -833,6 +1046,14 @@ export class StarfieldEngine {
           if (/swiftshader|llvmpipe|software/i.test(renderer)) this.quality = 0.45;
         }
         this.mode = "webgl";
+        this.canvas.addEventListener(
+          "webglcontextlost",
+          (event) => {
+            event.preventDefault();
+            this.fail("The picture stalled. Refresh to draw again.");
+          },
+          { signal: this.abort.signal },
+        );
         return;
       } catch (err) {
         this.fail(err instanceof Error ? err.message : "WebGL failed to start.");
@@ -915,6 +1136,105 @@ export class StarfieldEngine {
     }
   }
 
+  enter(chapter: string): void {
+    this.chapter = chapter;
+    const first = bodiesIn(chapter).find((body) => body.goal) ?? bodiesIn(chapter)[0];
+    if (!first) return;
+    const pos = bodyPosition(first, this.time);
+    let dx = pos.x;
+    let dz = pos.z;
+    let len = Math.hypot(dx, dz);
+    if (len < 1) {
+      dx = 0;
+      dz = 1;
+      len = 1;
+    }
+    const back = Math.max(visualRadius(first) * 4.5, 200);
+    this.shipX = pos.x - (dx / len) * back;
+    this.shipY = 18;
+    this.shipZ = pos.z - (dz / len) * back;
+    const fx = pos.x - this.shipX;
+    const fz = pos.z - this.shipZ;
+    const fl = Math.hypot(fx, fz) || 1;
+    this.yaw = Math.atan2(-fx / fl, fz / fl);
+    this.pitch = -0.04;
+    this.speed = 56;
+    this.boost = 1;
+    this.velX = 0;
+    this.velY = 0;
+    this.velZ = 0;
+    this.trail.length = 0;
+    this.nearId = "";
+    this.orbitId = "";
+    this.inserting = false;
+    this.insertSeeded = false;
+    this.captureHold = 0;
+    this.captureRadius = 0;
+    this.captureText = "";
+    this.captureAbort = "";
+    this.clearLap(false);
+    this.placed = true;
+  }
+
+  private roster(): BodyDef[] {
+    return bodiesIn(this.chapter);
+  }
+
+  private cameraEye(view: CameraView, orbitOn: boolean, reduced: boolean, stickX: number): [number, number, number] {
+    const pull = reduced ? this.boost * 0.4 : this.boost;
+    const out = this.orbitSign || 1;
+    if (view === "chase") {
+      if (orbitOn) return [out * (reduced ? 1.6 : 3.4), reduced ? 2.2 : 3.15, reduced ? -10 : -8.4];
+      return [0, 1.7 + pull * 0.55, -11 - pull * 4.2];
+    }
+    if (view === "left" || view === "right") {
+      const side = view === "left" ? -1 : 1;
+      if (orbitOn) return [side * (reduced ? 7 : 9.2), reduced ? 2 : 2.8, reduced ? -8 : -5.6];
+      return [side * (6.4 + pull * 1.8), 1.6 + pull * 0.35, -10 - pull * 2.8];
+    }
+    if (view === "above") return this.abovePerch(orbitOn, reduced, stickX, this.hooks.current.getParams().aboveSide);
+    if (orbitOn) return [out * (reduced ? 0.2 : 0.72), reduced ? 0.28 : 0.58, reduced ? 0.08 : -0.35];
+    return [0, 0.15 - pull * 0.12, 0.15 - pull * 1.15];
+  }
+
+  /** Overhead perch. Left, center, or right, still swinging to frame an orbit. */
+  private abovePerch(orbitOn: boolean, reduced: boolean, stickX: number, side: number): [number, number, number] {
+    const slot = reduced ? 0 : clamp(Math.round(side), -1, 1);
+    const shoulder = slot * 6.4;
+    if (orbitOn) {
+      if (reduced) return [shoulder || -(this.orbitSign || 1) * 5.5, 3.6, -9.4];
+      const swing = this.time * 0.36 * (this.orbitSign || 1);
+      const sway = slot === 0 ? 4.6 : 1.5;
+      return [shoulder * 0.82 + Math.sin(swing) * sway, 3.55 + Math.abs(slot) * 0.2, -11.2 - Math.cos(swing) * 0.55];
+    }
+    const pass = this.passFrame();
+    const lean = reduced ? 0 : stickX;
+    const nose = reduced ? 0 : this.pitch;
+    const x = shoulder + pass.side * (1.5 + pass.weight * 2.1) - lean * 1.3;
+    const y = 3.15 + pass.weight * 1.2 - nose * 1.4 + this.boost * 0.4 + Math.abs(slot) * 0.15;
+    const z = -8.4 - pass.weight * (2.2 + this.boost * 2.6) - Math.abs(lean) * 1.1 - this.boost * 1.6;
+    return [clamp(x, -11, 11), clamp(y, 2.15, 5.2), clamp(z, -14, -6.4)];
+  }
+
+  /** Where the nearest body sits in view, and how close the pass is. */
+  private passFrame(): { side: number; weight: number } {
+    let best = 0;
+    let side = 0;
+    for (const body of this.roster()) {
+      if (body.quiet) continue;
+      const pos = bodyPosition(body, this.time);
+      const dist = Math.hypot(pos.x - this.shipX, pos.y - this.shipY, pos.z - this.shipZ);
+      const reach = Math.max(surveyRadius(body) * 1.7, visualRadius(body) * 8);
+      const weight = clamp(1 - dist / reach, 0, 1);
+      if (weight <= best) continue;
+      const cam = worldToCamera(pos.x - this.shipX, pos.y - this.shipY, pos.z - this.shipZ, this.yaw, this.pitch);
+      if (cam.z < 0.8) continue;
+      best = weight;
+      side = clamp(cam.x / Math.max(cam.z, 0.8), -1.2, 1.2);
+    }
+    return { side, weight: best };
+  }
+
   private placeShip(): void {
     if (this.placed) return;
     this.placed = true;
@@ -963,39 +1283,70 @@ export class StarfieldEngine {
   }
 
   private onPointerMove = (e: PointerEvent): void => {
-    if (e.pointerId === this.hudPointer) return;
-    if (e.pointerType === "touch" && e.buttons === 0) return;
-    if (this.isHud(e.target)) {
-      this.hasPointer = false;
-      this.pointerX = 0;
-      this.pointerY = 0;
-      return;
+    if (Math.hypot(e.clientX - this.downX, e.clientY - this.downY) > 36) this.downMoved = true;
+    if (this.holdLook) {
+      if (Math.hypot(e.clientX - this.holdX, e.clientY - this.holdY) < 36) return;
+      this.holdLook = false;
     }
+    if (e.pointerId === this.hudPointer || !this.dragging) return;
+    if (e.pointerType === "touch" && e.buttons === 0) return;
+    const dx = e.clientX - this.dragX;
+    const dy = e.clientY - this.dragY;
+    if (Math.hypot(dx, dy) < 36) return;
+    this.pendingGuide = null;
+    this.guide = false;
+    const rect = this.canvas.getBoundingClientRect();
+    const radius = Math.max(180, Math.min(rect.width, rect.height) * 0.55);
     this.hasPointer = true;
-    this.readPointer(e);
+    this.pointerX = clamp(dx / radius, -1, 1);
+    this.pointerY = clamp(dy / radius, -1, 1);
   };
 
   private onPointerDown = (e: PointerEvent): void => {
     this.audio.unlock();
+    this.downX = e.clientX;
+    this.downY = e.clientY;
+    this.downMoved = false;
     if (this.isHud(e.target)) {
       this.hudPointer = e.pointerId;
+      this.dragging = false;
       this.hasPointer = false;
       this.pointerX = 0;
       this.pointerY = 0;
+      this.smoothPX = 0;
+      this.smoothPY = 0;
+      this.guide = false;
+      this.pendingGuide = null;
       return;
     }
-    if (e.pointerType === "touch") {
-      this.hasPointer = true;
-      this.readPointer(e);
-    }
+    this.dragging = true;
+    this.dragX = e.clientX;
+    this.dragY = e.clientY;
   };
 
   private onPointerUp = (e: PointerEvent): void => {
     if (e.pointerId === this.hudPointer) this.hudPointer = -1;
-    if (e.pointerType !== "touch") return;
+    this.dragging = false;
     this.hasPointer = false;
     this.pointerX = 0;
     this.pointerY = 0;
+    if (this.isHud(e.target) || this.downMoved) {
+      this.tapAt = 0;
+      this.pendingGuide = null;
+      return;
+    }
+    const now = performance.now();
+    const repeat =
+      now - this.tapAt < 340 && Math.hypot(e.clientX - this.tapX, e.clientY - this.tapY) < 28;
+    this.tapAt = now;
+    this.tapX = e.clientX;
+    this.tapY = e.clientY;
+    if (repeat) {
+      this.pendingGuide = null;
+      this.tryFocus(e.clientX, e.clientY);
+      return;
+    }
+    this.armGuide(e.clientX, e.clientY);
   };
 
   private onPointerLeave = (e: PointerEvent): void => {
@@ -1004,13 +1355,6 @@ export class StarfieldEngine {
     this.pointerX = 0;
     this.pointerY = 0;
   };
-
-  private readPointer(e: PointerEvent): void {
-    const rect = this.canvas.getBoundingClientRect();
-    if (rect.width < 1 || rect.height < 1) return;
-    this.pointerX = clamp(((e.clientX - rect.left) / rect.width) * 2 - 1, -1, 1);
-    this.pointerY = clamp(((e.clientY - rect.top) / rect.height) * 2 - 1, -1, 1);
-  }
 
   private onKeyDown = (e: KeyboardEvent): void => {
     this.audio.unlock();
@@ -1089,6 +1433,11 @@ export class StarfieldEngine {
 
   private frame = (now: number): void => {
     if (!this.running || this.destroyed) return;
+    if (document.hidden) {
+      this.prevNow = 0;
+      this.raf = requestAnimationFrame(this.frame);
+      return;
+    }
     const dt = Math.min(0.05, Math.max(0.001, (now - (this.prevNow || now)) / 1000));
     this.prevNow = now;
     this.step(dt);
@@ -1100,11 +1449,36 @@ export class StarfieldEngine {
 
   private step(dt: number): void {
     const params = this.hooks.current.getParams();
+    if (params.paused) {
+      this.alert = "Paused";
+      this.alertUntil = this.time + 10;
+      return;
+    }
+    if (this.alert === "Paused") {
+      this.alert = "";
+      this.alertUntil = 0;
+    }
+    if (params.focus && !this.wasFocus) {
+      this.holdLook = true;
+      this.hasPointer = false;
+      this.pointerX = 0;
+      this.pointerY = 0;
+      this.smoothPX = 0;
+      this.smoothPY = 0;
+    }
+    if (!params.focus && this.wasFocus) this.holdLook = false;
+    this.wasFocus = params.focus;
+    if (this.pendingGuide && performance.now() - this.pendingGuide.at > 360) {
+      this.guideX = this.pendingGuide.x;
+      this.guideY = this.pendingGuide.y;
+      this.guide = true;
+      this.pendingGuide = null;
+    }
     const stick = this.readStick(dt);
     let sx = stick.x;
     let sy = stick.y;
     const manual =
-      Math.abs(this.smoothPX) + Math.abs(this.smoothPY) > 0.42 ||
+      (this.hasPointer && Math.abs(this.smoothPX) + Math.abs(this.smoothPY) > 0.55) ||
       this.keys.has("KeyA") ||
       this.keys.has("KeyD") ||
       this.keys.has("ArrowLeft") ||
@@ -1139,7 +1513,8 @@ export class StarfieldEngine {
         const dist = this.rangeTo(pass.id);
         const gate = holdRadius(pass) * 2.2;
         const crossed = this.passId === pass.id && this.passDist > gate && dist <= gate;
-        if (crossed && pass.id !== this.lapSkip) {
+        const inbound = this.closingOn(pass.id);
+        if (crossed && !inbound && pass.id !== this.lapSkip) {
           this.lapFor = pass.id;
           this.lapSwept = 0;
           this.lapArmed = false;
@@ -1159,18 +1534,33 @@ export class StarfieldEngine {
       }
     }
     const orbitBody = params.orbit ? params.targetId : this.lapFor || params.targetId;
+    const orbitNear =
+      this.lapFor !== "" || this.rangeTo(orbitBody) < this.clearOrbitRadius(bodyById(orbitBody), params.orbitLevel) * 1.5;
     const burningOut = params.boost && !this.lapIgnoreBoost;
-    const orbitOn = (params.orbit || this.lapFor !== "") && !manual && !this.lapRelease && !burningOut;
+    const orbitOn =
+      (params.orbit || this.lapFor !== "") && orbitNear && !manual && !this.lapRelease && !burningOut;
+    if (params.orbit && orbitOn && params.autopilot && !this.lapFor) this.hooks.current.onCancelAutopilot();
+    if (!params.orbit && !this.lapFor) this.captureAbort = "";
+    if (!orbitOn) {
+      this.inserting = false;
+      this.insertSeeded = false;
+      this.captureHold = 0;
+      this.captureRadius = 0;
+      this.captureText = "";
+    }
     if ((params.orbit || this.lapFor) && manual) {
       this.clearLap(true);
       this.hooks.current.onCancelOrbit();
+    } else if (params.focus && manual) {
+      this.hooks.current.onCancelFocus();
     } else if (params.autopilot && manual) {
       this.hooks.current.onCancelAutopilot();
-    } else if (orbitOn || params.autopilot) {
-      const aim = this.aimStick(orbitBody);
+    } else if ((orbitOn && !this.inserting) || params.autopilot || params.focus) {
+      const aim = this.aimStick(orbitOn ? orbitBody : params.targetId, orbitOn);
       if (aim) {
-        sx = clamp(aim.x, -1, 1);
-        sy = clamp(aim.y, -1, 1);
+        const pull = params.focus && !orbitOn ? 1.35 : 1;
+        sx = clamp(aim.x * pull, -1, 1);
+        sy = clamp(aim.y * pull, -1, 1);
       }
     }
     this.stickX = sx;
@@ -1194,12 +1584,14 @@ export class StarfieldEngine {
     } else {
       this.pitch = clamp(this.pitch + pitchRate * dt, -1.05, 1.05);
     }
+    if (!orbitOn) this.steerClear(dt, params.targetId);
     const dYaw = this.yaw - prevYaw;
     const dPitch = this.pitch - prevPitch;
 
     const approach = this.rangeTo(params.targetId);
-    const bubble = surveyRadius(bodyById(params.targetId));
-    const autoBoost = params.autopilot && !orbitOn && approach > bubble * 3.2;
+    const targetBody = bodyById(params.targetId);
+    const arrive = skinRadius(targetBody) * 1.22;
+    const autoBoost = params.autopilot && !orbitOn && approach > arrive * 6;
     const boostTarget = orbitOn ? 0 : params.boost || autoBoost ? 1 : 0;
     const bk = boostTarget > this.boost ? 5 : 2.5;
     this.boost += (boostTarget - this.boost) * (1 - Math.exp(-bk * dt));
@@ -1207,7 +1599,10 @@ export class StarfieldEngine {
     const cruise = cruiseSpeed(params.speed, params.reducedMotion);
     let targetSpeed = cruise * (1 + this.boost * 3.8);
     let orbitDir: { x: number; y: number; z: number } | null = null;
-    if (orbitOn) {
+    let coasted = false;
+    if (orbitOn && this.inserting) {
+      coasted = this.flyCapture(dt, bodyById(orbitBody), params.speed, params.reducedMotion);
+    } else if (orbitOn) {
       const body = bodyById(orbitBody);
       const pos = bodyPosition(body, this.time);
       const rx = this.shipX - pos.x;
@@ -1217,7 +1612,11 @@ export class StarfieldEngine {
       const nx = rx / dist;
       const ny = ry / dist;
       const nz = rz / dist;
-      const want = holdRadius(body);
+      const want =
+        this.lapFor === body.id ? this.clearOrbitRadius(body, 1) : this.clearOrbitRadius(body, params.orbitLevel);
+      if (params.orbit && this.lapFor !== body.id) {
+        this.captureText = params.orbitLevel <= 0 ? "Low orbit" : params.orbitLevel >= 2 ? "High orbit" : "Mid orbit";
+      }
       if (this.orbitId !== body.id) {
         this.orbitId = body.id;
         const seeded = orbitTangent(rx, ry, rz);
@@ -1228,9 +1627,26 @@ export class StarfieldEngine {
       const tangent = orbitTangent(rx, ry, rz);
       const vTan = clamp(want * (params.reducedMotion ? 0.16 : 0.28), params.reducedMotion ? 6 : 8, params.reducedMotion ? 12 : 16);
       const vRad = clamp((dist - want) * 0.9, -14, params.reducedMotion ? 16 : 26);
+      let hop = 0;
+      for (const other of this.roster()) {
+        if (other.id === body.id || other.quiet) continue;
+        const op = bodyPosition(other, this.time);
+        const ox = this.shipX - op.x;
+        const oy = this.shipY - op.y;
+        const oz = this.shipZ - op.z;
+        const od = Math.hypot(ox, oy, oz);
+        const skin = skinRadius(other);
+        const warn = skin * 2.3;
+        if (od >= warn) continue;
+        const urgency = clamp((warn - od) / Math.max(1, warn - skin), 0, 1);
+        const flat = Math.hypot(ox, oz);
+        const rise = Math.sqrt(Math.max(0, (skin + 4) * (skin + 4) - Math.min(flat, skin + 4) ** 2)) + 1.4;
+        hop = Math.max(hop, rise * urgency);
+      }
       const vx = tangent.x * this.orbitSign * vTan - nx * vRad;
-      const vy = tangent.y * this.orbitSign * vTan - ny * vRad;
+      let vy = tangent.y * this.orbitSign * vTan - ny * vRad;
       const vz = tangent.z * this.orbitSign * vTan - nz * vRad;
+      vy += clamp((pos.y + hop - this.shipY) * 3.4, -20, 20);
       const mag = Math.hypot(vx, vy, vz) || 1;
       orbitDir = { x: vx / mag, y: vy / mag, z: vz / mag };
       targetSpeed = mag;
@@ -1260,40 +1676,43 @@ export class StarfieldEngine {
       }
     } else {
       this.orbitId = "";
-      if (params.autopilot && approach < bubble * 3) {
-        targetSpeed *= clamp(approach / (bubble * 3), 0.45, 1);
+      if (params.autopilot && approach < arrive * 8) {
+        targetSpeed *= clamp(approach / (arrive * 8), 0.16, 1);
       }
     }
     const respond = targetSpeed > this.speed ? 9 : 5.5;
-    this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-respond * dt));
-    if (!orbitOn && params.autopilot && approach < bubble * 1.2) this.hooks.current.onCancelAutopilot();
+    if (!coasted && params.autopilot && !orbitOn) {
+      targetSpeed = Math.min(targetSpeed, Math.max(arrive * 0.45, approach * 0.35));
+    }
+    if (!coasted) this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-respond * dt));
+    if (!orbitOn && params.autopilot && approach < arrive && this.closingOn(params.targetId)) {
+      this.speed = Math.min(this.speed, 1.2);
+      this.hooks.current.onCancelAutopilot();
+    }
 
-    const forward = orbitDir ?? cameraForward(this.yaw, this.pitch);
-    this.shipX += forward.x * this.speed * dt;
-    this.shipY = clamp(this.shipY + forward.y * this.speed * dt, -90, 90);
-    this.shipZ += forward.z * this.speed * dt;
-    const sunDist = Math.hypot(this.shipX, this.shipY, this.shipZ);
-    if (sunDist < 128) {
-      const push = ((128 - sunDist) / 128) * this.speed * dt * 1.8;
-      const inv = 1 / Math.max(sunDist, 1);
-      this.shipX += this.shipX * inv * push;
-      this.shipZ += this.shipZ * inv * push;
-      this.alert = "Too close to the Sun";
-    } else if (this.lapFor) {
+    if (!coasted) {
+      const forward = orbitDir ?? cameraForward(this.yaw, this.pitch);
+      this.shipX += forward.x * this.speed * dt;
+      this.shipY = clamp(this.shipY + forward.y * this.speed * dt, -90, 90);
+      this.shipZ += forward.z * this.speed * dt;
+    }
+    this.keepOutside();
+    if (this.lapFor) {
       this.alert = `One loop around ${bodyById(this.lapFor).name}`;
-    } else {
+    } else if (this.time >= this.alertUntil) {
       this.alert = "";
     }
 
-    const baseFov = params.view === "chase" ? 62 : params.view === "wing" ? 66 : 70;
+    const baseFov = params.view === "cockpit" ? 70 : params.view === "above" ? 64 : params.view === "chase" ? 62 : 66;
     const pace = clamp((this.speed - 16) / 110, 0, 1);
-    const fovTarget = (((params.reducedMotion ? baseFov - 6 : baseFov) + this.boost * 12 + pace * 11) * Math.PI) / 180;
+    const orbitFov = orbitOn ? (params.reducedMotion ? -3 : -7) : 0;
+    const boostFov = this.boost * (params.reducedMotion ? 6 : 16);
+    const fovTarget = (((params.reducedMotion ? baseFov - 6 : baseFov) + boostFov + pace * 8 + orbitFov) * Math.PI) / 180;
     this.fov += (fovTarget - this.fov) * (1 - Math.exp(-4 * dt));
     this.tanFov = Math.tan(this.fov * 0.5);
     this.rush = clamp(this.boost * 0.72 + pace * 0.85, 0, 1);
-    const eye =
-      params.view === "chase" ? [0, 1.7, -11] : params.view === "wing" ? [5.4, 1.5, -11] : [0, 0.15, 0.15];
-    const ease = 1 - Math.exp(-3.4 * dt);
+    const eye = this.cameraEye(params.view, orbitOn, params.reducedMotion, sx);
+    const ease = 1 - Math.exp((orbitOn || this.boost > 0.15 ? -5.2 : -3.4) * dt);
     this.eyeX += ((eye[0] ?? 0) - this.eyeX) * ease;
     this.eyeY += ((eye[1] ?? 0) - this.eyeY) * ease;
     this.eyeZ += ((eye[2] ?? 0) - this.eyeZ) * ease;
@@ -1321,7 +1740,7 @@ export class StarfieldEngine {
     this.integrateStars(dt, dYaw, dPitch);
     const rangeText = this.projectSystem(params.targetId);
     this.rememberTrail();
-    const taskId = stepTasks(this.taskMem, {
+    const taskId = this.chapter === "sun" ? stepTasks(this.taskMem, {
       dt,
       speed: this.speed,
       autopilot: params.autopilot,
@@ -1337,7 +1756,7 @@ export class StarfieldEngine {
       shipY: this.shipY,
       shipZ: this.shipZ,
       time: this.time,
-    });
+    }) : null;
     if (taskId) this.hooks.current.onTask(taskId, this.time);
 
     this.frames += 1;
@@ -1359,7 +1778,8 @@ export class StarfieldEngine {
 
     const warpText = warpFactor(this.speed).toFixed(2);
     const aimNow = this.aimStick(params.targetId);
-    const locked = !!aimNow && Math.hypot(aimNow.x, aimNow.y) < 0.16;
+    const aimErr = aimNow ? Math.hypot(aimNow.x, aimNow.y) : 1;
+    const locked = aimErr < (params.focus ? 0.22 : 0.16);
     if (warpText !== this.lastWarp || this.frames % 2 === 0) {
       this.lastWarp = warpText;
       this.hooks.current.onFrame({
@@ -1370,12 +1790,18 @@ export class StarfieldEngine {
         leveling: this.leveling,
         boosting: this.boost > 0.35 || autoBoost,
         rangeText,
+        speedText: Math.round(this.speed).toString(),
         targetId: params.targetId,
         nearId: this.nearId,
+        chartId: this.chartId,
         alert: this.alert,
         markers: this.markers,
+        plot: this.plot,
         locked,
         orbiting: orbitOn,
+        captureText: this.captureText,
+        shipX: this.shipX,
+        shipZ: this.shipZ,
       });
     }
   }
@@ -1391,7 +1817,7 @@ export class StarfieldEngine {
   private nearestPass(maxFactor: number): BodyDef | null {
     let best: BodyDef | null = null;
     let bestScore = maxFactor;
-    for (const body of BODIES) {
+    for (const body of this.roster()) {
       if (body.id === "sun" || body.quiet || body.speck || (!body.goal && !body.parent)) continue;
       const dist = this.rangeTo(body.id);
       const score = dist / holdRadius(body);
@@ -1403,14 +1829,118 @@ export class StarfieldEngine {
     return best;
   }
 
-  private aimStick(id: string): { x: number; y: number } | null {
-    const pos = bodyPosition(bodyById(id), this.time);
+  private aimStick(id: string, direct = false): { x: number; y: number } | null {
+    const pos = direct ? bodyPosition(bodyById(id), this.time) : this.guidePoint(id);
     const cam = worldToCamera(pos.x - this.shipX, pos.y - this.shipY, pos.z - this.shipZ, this.yaw, this.pitch);
     if (cam.z < 1) return { x: cam.x >= 0 ? 0.85 : -0.85, y: clamp(-cam.y / 48, -0.55, 0.55) };
     return {
       x: clamp((cam.x / cam.z) * 1.7, -1, 1),
       y: clamp((-cam.y / cam.z) * 1.7, -1, 1),
     };
+  }
+
+  /** A point past whatever is blocking the line, so the ship goes around it instead of stopping on it. */
+  private guidePoint(id: string): { x: number; y: number; z: number } {
+    const goal = bodyPosition(bodyById(id), this.time);
+    const sx = this.shipX;
+    const sy = this.shipY;
+    const sz = this.shipZ;
+    const vx = goal.x - sx;
+    const vy = goal.y - sy;
+    const vz = goal.z - sz;
+    const span = Math.hypot(vx, vy, vz) || 1;
+    const ux = vx / span;
+    const uy = vy / span;
+    const uz = vz / span;
+    let best: {
+      x: number;
+      y: number;
+      z: number;
+      along: number;
+      pad: number;
+      rank: number;
+    } | null = null;
+    for (const body of this.roster()) {
+      if (body.quiet || body.id === id) continue;
+      const pos = bodyPosition(body, this.time);
+      const pad = skinRadius(body) * (body.id === "sun" ? 1.45 : 1.15) + (body.id === "sun" ? 16 : 4);
+      const wx = pos.x - sx;
+      const wy = pos.y - sy;
+      const wz = pos.z - sz;
+      const along = wx * ux + wy * uy + wz * uz;
+      const lateral = Math.hypot(wx - ux * along, wy - uy * along, wz - uz * along);
+      const dist = Math.hypot(wx, wy, wz);
+      const stuck = dist < pad * 1.35 && along > -pad;
+      const blocking = along > pad * 0.25 && along < span - 4 && lateral < pad;
+      if (!stuck && !blocking) continue;
+      const rank = stuck ? dist : along + 10000;
+      if (!best || rank < best.rank) best = { x: pos.x, y: pos.y, z: pos.z, along, pad, rank };
+    }
+    if (!best) return goal;
+    let ox = sx - best.x;
+    let oy = sy - best.y;
+    let oz = sz - best.z;
+    const om = Math.hypot(ox, oy, oz);
+    if (om < 0.4) {
+      ox = -uz;
+      oy = 0;
+      oz = ux;
+    } else {
+      ox /= om;
+      oy /= om;
+      oz /= om;
+    }
+    const radial = ux * ox + uy * oy + uz * oz;
+    let tx = ux - ox * radial;
+    let ty = uy - oy * radial;
+    let tz = uz - oz * radial;
+    let tm = Math.hypot(tx, ty, tz);
+    if (tm < 0.2) {
+      tx = -oz;
+      ty = 0;
+      tz = ox;
+      tm = Math.hypot(tx, ty, tz) || 1;
+    }
+    tx /= tm;
+    ty /= tm;
+    tz /= tm;
+    const out = best.pad + 5;
+    const around = best.pad + 18;
+    return {
+      x: best.x + ox * out + tx * around,
+      y: best.y + oy * out + ty * around,
+      z: best.z + oz * out + tz * around,
+    };
+  }
+
+  /** Turn aside before a body that is not the one you chose. */
+  private steerClear(dt: number, targetId: string): void {
+    const forward = cameraForward(this.yaw, this.pitch);
+    let yawNudge = 0;
+    let pitchNudge = 0;
+    for (const body of this.roster()) {
+      if (body.quiet || body.id === targetId) continue;
+      const pos = bodyPosition(body, this.time);
+      const dx = pos.x - this.shipX;
+      const dy = pos.y - this.shipY;
+      const dz = pos.z - this.shipZ;
+      const dist = Math.hypot(dx, dy, dz);
+      const skin = skinRadius(body);
+      const bubble = body.id === "sun" ? skin * 1.7 : skin * 1.25;
+      if (dist >= bubble || dist < 0.05) continue;
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const nz = dz / dist;
+      const closing = forward.x * nx + forward.y * ny + forward.z * nz;
+      if (closing < 0.05 && dist > skin * 1.1 && body.id !== "sun") continue;
+      const urgency = clamp((bubble - dist) / (bubble - skin), 0, 1) * (body.id === "sun" ? 1 : Math.max(closing, 0.35));
+      const gain = body.id === "sun" ? 2.4 : dist < skin * 1.08 ? 3.2 : 0.9;
+      const side = nx * forward.z + nz * -forward.x;
+      yawNudge += (side === 0 ? 1 : Math.sign(side)) * urgency * gain;
+      pitchNudge += -ny * urgency * (body.id === "sun" ? 1.2 : 0.45);
+    }
+    this.yaw += clamp(yawNudge, -1.6, 1.6) * dt;
+    if (!this.leveling) this.pitch = clamp(this.pitch + clamp(pitchNudge, -0.8, 0.8) * dt, -1.05, 1.05);
   }
 
   private rangeTo(id: string): number {
@@ -1423,6 +1953,7 @@ export class StarfieldEngine {
     const tan = this.tanFov || 0.7;
     const cs = Math.cos(-this.bank);
     const sn = Math.sin(-this.bank);
+    this.picks = [];
     const rows: {
       body: BodyDef;
       dist: number;
@@ -1438,21 +1969,45 @@ export class StarfieldEngine {
       style: number;
     }[] = [];
     let near = "";
-    let nearDist = Infinity;
+    let chart = "";
     let rangeText = "—";
-    for (const body of BODIES) {
+    const contacts: {
+      id: string;
+      name: string;
+      wx: number;
+      wz: number;
+      orbit: number;
+      target: boolean;
+      close: boolean;
+    }[] = [];
+    for (const body of this.roster()) {
       const pos = bodyPosition(body, this.time);
       const dx = pos.x - this.shipX;
       const dy = pos.y - this.shipY;
       const dz = pos.z - this.shipZ;
       const dist = Math.hypot(dx, dy, dz);
       if (body.id === targetId) {
-        const ratio = dist / EARTH_ORBIT;
-        rangeText = ratio < 0.08 ? "Here" : `${ratio.toFixed(ratio < 10 ? 2 : 1)}× orbit`;
+        rangeText = formatRange(dist, this.chapter);
+        const flying = this.hooks.current.getParams().autopilot;
+        const seconds = this.speed > 0.8 ? dist / this.speed : 0;
+        if (flying && rangeText !== "Here" && seconds > 2 && seconds < 3600) {
+          rangeText += seconds < 90 ? ` · ${Math.ceil(seconds)}s` : ` · ${Math.ceil(seconds / 60)}m`;
+        }
+        if (dist < surveyRadius(body)) {
+          near = body.id;
+          if (body.goal) chart = body.id;
+        }
       }
-      if (!body.quiet && dist < surveyRadius(body) && dist < nearDist) {
-        near = body.id;
-        nearDist = dist;
+      if (!body.quiet) {
+        contacts.push({
+          id: body.id,
+          name: body.name,
+          wx: pos.x,
+          wz: pos.z,
+          orbit: body.parent || body.id === "sun" ? 0 : Math.hypot(pos.x, pos.z),
+          target: body.id === targetId,
+          close: dist < skinRadius(body) * 2.6,
+        });
       }
       const toSun = worldToCamera(-pos.x, -pos.y, -pos.z, this.yaw, this.pitch);
       let lx = toSun.x;
@@ -1471,7 +2026,11 @@ export class StarfieldEngine {
               ? 2
               : body.id === "uranus" || body.id === "neptune"
                 ? 3
-                : 0;
+                : body.id === "mars"
+                  ? 5
+                  : body.parent && !body.speck
+                    ? 4
+                    : 0;
       const cam0 = worldToCamera(dx, dy, dz, this.yaw, this.pitch);
       const cam = { x: cam0.x - this.eyeX, y: cam0.y - this.eyeY, z: cam0.z - this.eyeZ };
       if (cam.z < 0.5) {
@@ -1480,6 +2039,16 @@ export class StarfieldEngine {
       }
       const floor = body.speck ? 0.0035 : body.id === "sun" ? 0.02 : 0.011;
       const radY = clamp(visualRadius(body) / cam.z / tan, floor, 1.35);
+      if (!body.quiet) {
+        const px = (cam.x / cam.z / tan / aspect) * cs - (cam.y / cam.z / tan) * sn;
+        const py = (cam.x / cam.z / tan / aspect) * sn + (cam.y / cam.z / tan) * cs;
+        this.picks.push({
+          id: body.id,
+          x: px * 0.5 + 0.5,
+          y: 1 - (py * 0.5 + 0.5),
+          rad: radY * 0.5,
+        });
+      }
       rows.push({
         body,
         dist,
@@ -1495,11 +2064,13 @@ export class StarfieldEngine {
         style,
       });
     }
+    this.chartId = chart;
     if (near) this.nearId = near;
     else if (this.nearId) {
       const held = bodyById(this.nearId);
-      if (this.rangeTo(held.id) > surveyRadius(held) * 2.8) this.nearId = "";
+      if (held.id !== targetId || this.rangeTo(held.id) > surveyRadius(held) * 1.35) this.nearId = "";
     }
+    this.plot = plotSystem(contacts, this.shipX, this.shipZ, this.yaw, this.hooks.current.getParams().depots);
     rows.sort((a, b) => b.camZ - a.camZ);
     let count = 0;
     const push = (
@@ -1543,9 +2114,21 @@ export class StarfieldEngine {
     };
     for (const row of rows) {
       if (row.radY <= 0) continue;
-      if (row.body.id === "sun") {
-        push(row, 3.7, 3.7, 0);
+      const form = row.body.form;
+      if (row.body.id === "sun" || form === "star") {
+        push(row, row.body.id === "sun" ? 3.7 : 2.8, row.body.id === "sun" ? 3.7 : 2.8, 0);
         push(row, 1, 1, 0.08);
+        continue;
+      }
+      if (form === "galaxy") {
+        push(row, 2.55, 0.58, 0);
+        push(row, 0.36, 0.36, 0.08);
+        continue;
+      }
+      if (form === "cluster" || form === "cloud") {
+        push(row, form === "cloud" ? 1.65 : 2.15, form === "cloud" ? 1.65 : 2.15, 0);
+        push(row, 0.42, 0.42, 0.08);
+        continue;
       }
       if (row.body.id === "halley") push(row, 2.6, 2.6, 0);
       if (row.body.id === "saturn") push(row, 2.35, 0.46, 2);
@@ -1584,7 +2167,16 @@ export class StarfieldEngine {
       let y = behind ? 0.46 : 1 - (y1 * 0.5 + 0.5);
       const primary = row.body.id === targetId;
       if (!primary && (behind || x < 0 || x > 1 || y < 0.02 || y > 0.92)) continue;
-      const halo = row.body.id === "sun" ? 4 : row.body.id === "halley" ? 2.6 : 1.22;
+      const halo =
+        row.body.id === "sun" || row.body.form === "star"
+          ? 3.6
+          : row.body.form === "galaxy"
+            ? 1.5
+            : row.body.form === "cloud" || row.body.form === "cluster"
+              ? 2.1
+              : row.body.id === "halley"
+                ? 2.6
+                : 1.22;
       const lift = behind ? 0 : Math.min(Math.max(row.radY, 0) * 0.5 * halo, 0.48);
       this.markers.push({
         id: row.body.id,
@@ -1608,9 +2200,226 @@ export class StarfieldEngine {
     return rangeText;
   }
 
+  private tryFocus(clientX: number, clientY: number): void {
+    const marker = document.elementFromPoint(clientX, clientY);
+    const named = marker instanceof Element ? marker.closest(".marker") : null;
+    const namedId = named instanceof HTMLElement ? named.dataset.id : "";
+    if (namedId) {
+      this.armFocus(clientX, clientY);
+      this.hooks.current.onFocus(namedId);
+      return;
+    }
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return;
+    let bestId = "";
+    let best = Infinity;
+    for (const pick of this.picks) {
+      const dx = (pick.x - (clientX - rect.left) / rect.width) * rect.width;
+      const dy = (pick.y - (clientY - rect.top) / rect.height) * rect.height;
+      const dist = Math.hypot(dx, dy);
+      const size = Math.max(pick.rad * rect.height, 18);
+      if (dist > size * 1.05) continue;
+      const score = dist / size;
+      if (score < best) {
+        best = score;
+        bestId = pick.id;
+      }
+    }
+    if (!bestId) return;
+    this.armFocus(clientX, clientY);
+    this.hooks.current.onFocus(bestId);
+  }
+
+  private armFocus(clientX: number, clientY: number): void {
+    this.holdLook = true;
+    this.holdX = clientX;
+    this.holdY = clientY;
+    this.hasPointer = false;
+    this.pointerX = 0;
+    this.pointerY = 0;
+    this.smoothPX = 0;
+    this.smoothPY = 0;
+  }
+
+  private closingOn(id: string): boolean {
+    const pos = bodyPosition(bodyById(id), this.time);
+    const dx = pos.x - this.shipX;
+    const dy = pos.y - this.shipY;
+    const dz = pos.z - this.shipZ;
+    const dist = Math.hypot(dx, dy, dz) || 1;
+    const nose = cameraForward(this.yaw, this.pitch);
+    return (nose.x * dx + nose.y * dy + nose.z * dz) / dist > 0.55;
+  }
+
+  /** Chosen orbit, pushed outside any moon ring or parent that the circle would cross. */
+  private clearOrbitRadius(body: BodyDef, level: number): number {
+    let want = orbitLevelRadius(body, level);
+    const rings: { ring: number; pad: number }[] = [];
+    for (const other of this.roster()) {
+      if (other.id === body.id || other.quiet) continue;
+      if (other.parent === body.id) rings.push({ ring: other.localR ?? 30, pad: skinRadius(other) + 5.5 });
+      else if (body.parent && other.id === body.parent) rings.push({ ring: body.localR ?? 30, pad: skinRadius(other) + 7 });
+    }
+    for (let pass = 0; pass < 6; pass++) {
+      let bumped = false;
+      for (const item of rings) {
+        if (Math.abs(want - item.ring) < item.pad) {
+          want = item.ring + item.pad;
+          bumped = true;
+        }
+      }
+      if (!bumped) break;
+    }
+    return want;
+  }
+
+  private keepOutside(): void {
+    for (const body of this.roster()) {
+      const pos = bodyPosition(body, this.time);
+      const dx = this.shipX - pos.x;
+      const dy = this.shipY - pos.y;
+      const dz = this.shipZ - pos.z;
+      const dist = Math.hypot(dx, dy, dz);
+      const skin = skinRadius(body);
+      if (dist >= skin || dist < 0.001) continue;
+      const scale = skin / dist;
+      this.shipX = pos.x + dx * scale;
+      this.shipY = clamp(pos.y + dy * scale, -90, 90);
+      this.shipZ = pos.z + dz * scale;
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const nz = dz / dist;
+      const inward = this.velX * nx + this.velY * ny + this.velZ * nz;
+      if (inward < 0) {
+        this.velX -= nx * inward;
+        this.velY -= ny * inward;
+        this.velZ -= nz * inward;
+      }
+    }
+  }
+
+  private flyCapture(dt: number, body: BodyDef, throttle: number, reduced: boolean): boolean {
+    const pos = bodyPosition(body, this.time);
+    const rx = this.shipX - pos.x;
+    const ry = this.shipY - pos.y;
+    const rz = this.shipZ - pos.z;
+    const dist = Math.hypot(rx, ry, rz) || 1;
+    const nx = rx / dist;
+    const ny = ry / dist;
+    const nz = rz / dist;
+    const well = captureWell(body);
+    if (!this.insertSeeded) {
+      const facing = cameraForward(this.yaw, this.pitch);
+      const inbound = facing.x * nx + facing.y * ny + facing.z * nz;
+      let dx = facing.x;
+      let dy = facing.y;
+      let dz = facing.z;
+      if (inbound < -0.25) {
+        const tangent = orbitTangent(rx, ry, rz);
+        dx = tangent.x;
+        dy = tangent.y;
+        dz = tangent.z;
+        this.pitch = Math.asin(clamp(dy, -1, 1));
+        const cp = Math.cos(this.pitch) || 1;
+        this.yaw = Math.atan2(-dx / cp, dz / cp);
+        this.orbitSign = 1;
+      }
+      this.velX = dx * this.speed;
+      this.velY = dy * this.speed;
+      this.velZ = dz * this.speed;
+      this.insertSeeded = true;
+    }
+    const g = well.gm / (dist * dist);
+    this.velX -= nx * g * dt;
+    this.velY -= ny * g * dt;
+    this.velZ -= nz * g * dt;
+    const nose = cameraForward(this.yaw, this.pitch);
+    const along = this.velX * nose.x + this.velY * nose.y + this.velZ * nose.z;
+    const cruise = 4 + clamp(throttle, 0, 1) * (reduced ? 22 : 46);
+    const thrust = clamp(cruise - along, -22, 24);
+    this.velX += nose.x * thrust * dt;
+    this.velY += nose.y * thrust * dt;
+    this.velZ += nose.z * thrust * dt;
+    this.shipX += this.velX * dt;
+    this.shipY = clamp(this.shipY + this.velY * dt, -90, 90);
+    this.shipZ += this.velZ * dt;
+    this.speed = Math.hypot(this.velX, this.velY, this.velZ);
+
+    const vRad = this.velX * nx + this.velY * ny + this.velZ * nz;
+    const vTan = Math.hypot(this.velX - nx * vRad, this.velY - ny * vRad, this.velZ - nz * vRad);
+    const vCirc = Math.sqrt(well.gm / Math.max(dist, 1));
+    const band = captureBand(dist, well);
+    const label = band === "low" ? "Low" : band === "mid" ? "Mid" : band === "high" ? "High" : "Edge";
+    const tol = reduced ? 0.28 : 0.16;
+    const speedErr = (vTan - vCirc) / Math.max(vCirc, 0.001);
+    const escape = Math.sqrt((2 * well.gm) / dist);
+    const drop = (message: string) => {
+      this.captureText = "";
+      this.alert = message;
+      this.alertUntil = this.time + 3.4;
+      this.inserting = false;
+      this.insertSeeded = false;
+      this.captureHold = 0;
+      this.captureAbort = body.id;
+      this.hooks.current.onCancelOrbit();
+    };
+    if (dist < well.floor) {
+      this.shipX += nx * 8;
+      this.shipZ += nz * 8;
+      this.velX = nx * 16;
+      this.velY = 0;
+      this.velZ = nz * 16;
+      this.speed = 16;
+      drop("Too low. Burning in.");
+      return true;
+    }
+    if (dist > well.soi || (band === "edge" && vTan > escape)) {
+      drop("Too fast. Skipped the capture.");
+      return true;
+    }
+    if (band !== "edge" && Math.abs(speedErr) < tol && Math.abs(vRad) < vCirc * 0.3) {
+      this.captureHold += dt;
+      this.captureText = `${label} · hold`;
+      if (this.captureHold > (reduced ? 0.55 : 1.15)) {
+        this.inserting = false;
+        this.insertSeeded = false;
+        this.captureRadius = dist;
+        this.captureText = `${label} orbit`;
+        this.captureHold = 0;
+        this.orbitId = "";
+      }
+    } else {
+      this.captureHold = Math.max(0, this.captureHold - dt * 0.35);
+      const note =
+        vRad < -vCirc * 0.3 ? "falling" : vRad > vCirc * 0.3 ? "climbing" : speedErr > 0 ? "fast" : "slow";
+      this.captureText = `${label} · ${note}`;
+    }
+    return true;
+  }
+
+  private armGuide(clientX: number, clientY: number): void {
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return;
+    const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    const y = ((clientY - rect.top) / rect.height) * 2 - 1;
+    if (Math.hypot(x, y) < 0.12) return;
+    this.pendingGuide = {
+      x: clamp(x * 0.38, -0.42, 0.42),
+      y: clamp(y * 0.32, -0.36, 0.36),
+      at: performance.now(),
+    };
+  }
+
   private readStick(dt: number): { x: number; y: number } {
-    const tx = this.hasPointer ? shape(this.pointerX) : 0;
-    const ty = this.hasPointer ? shape(this.pointerY) : 0;
+    if (this.guide) {
+      const fade = Math.exp(-1.8 * dt);
+      this.guideX *= fade;
+      this.guideY *= fade;
+      if (Math.hypot(this.guideX, this.guideY) < 0.02) this.guide = false;
+    }
+    const gazeScale = this.hooks.current.getParams().reducedMotion ? 0.34 : 0.58;
+    const tx = this.hasPointer ? shape(this.pointerX) * 0.62 : this.guide ? this.guideX : this.gazeOn ? this.gazeX * gazeScale : 0;
+    const ty = this.hasPointer ? shape(this.pointerY) * 0.62 : this.guide ? this.guideY : this.gazeOn ? this.gazeY * gazeScale : 0;
     const k = 1 - Math.exp(-12 * dt);
     this.smoothPX += (tx - this.smoothPX) * k;
     this.smoothPY += (ty - this.smoothPY) * k;
