@@ -522,6 +522,23 @@ export function goalsIn(chapter: string): BodyDef[] {
   return bodiesIn(chapter).filter((body) => body.goal);
 }
 
+/** The places the nav lists for a chapter, in flight order. */
+export function navIn(chapter: string): BodyDef[] {
+  return bodiesIn(chapter).filter((body) => body.nav);
+}
+
+/** The place after `id` in the nav, wrapping round. The first place when `id` is not listed. */
+export function nextInNav(chapter: string, id: string): BodyDef | undefined {
+  const nav = navIn(chapter);
+  const index = nav.findIndex((body) => body.id === id);
+  return nav[(index + 1 + nav.length) % nav.length];
+}
+
+/** A place that counts toward some chapter's chart. */
+export function isChartable(id: string): boolean {
+  return CHAPTERS.some((chapter) => goalsIn(chapter.id).some((body) => body.id === id));
+}
+
 export function chapterDone(chapter: string, charted: readonly string[]): boolean {
   const goals = goalsIn(chapter);
   return goals.length > 0 && goals.every((body) => charted.includes(body.id));

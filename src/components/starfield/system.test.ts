@@ -9,6 +9,9 @@ import {
   chapterDone,
   chapterOpen,
   goalsIn,
+  isChartable,
+  navIn,
+  nextInNav,
   orbitRadius,
   surveyRadius,
   visualRadius,
@@ -80,5 +83,24 @@ describe("chapters", () => {
 
   it("never counts an unknown chapter as done", () => {
     assert.equal(chapterDone("nowhere", allSun), false);
+  });
+});
+
+describe("isChartable", () => {
+  it("counts every chapter goal and nothing else", () => {
+    for (const chapter of CHAPTERS) for (const body of goalsIn(chapter.id)) assert.ok(isChartable(body.id), body.id);
+    assert.equal(isChartable("atlantis"), false);
+  });
+});
+
+describe("nextInNav", () => {
+  it("steps through the nav in order and wraps round", () => {
+    const nav = navIn("sun");
+    assert.equal(nextInNav("sun", nav[0]!.id), nav[1]);
+    assert.equal(nextInNav("sun", nav.at(-1)!.id), nav[0]);
+  });
+
+  it("starts from the top for a place the nav does not list", () => {
+    assert.equal(nextInNav("sun", "atlantis"), navIn("sun")[0]);
   });
 });
