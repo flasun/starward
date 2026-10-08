@@ -28,3 +28,18 @@ export function starBudget(density: number, mobile: boolean): number {
   const max = mobile ? 4600 : MAX_STARS;
   return Math.round(min + (max - min) * clamp01(density));
 }
+
+/** Stick response: a small dead zone, then a gentle curve. */
+export function shape(v: number): number {
+  const dz = 0.07;
+  const a = Math.abs(v);
+  if (a < dz) return 0;
+  const s = (a - dz) / (1 - dz);
+  return Math.sign(v) * Math.pow(s, 1.2);
+}
+
+/** Wraps into 0–1, negatives included. */
+export function wrap01(v: number): number {
+  const x = v % 1;
+  return x < 0 ? x + 1 : x;
+}

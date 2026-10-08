@@ -53,7 +53,15 @@ CI (`.github/workflows/ci.yml`) runs typecheck, lint, the game tests, and both b
 ```
 src/components/starfield/
   Starward.tsx   React UI and game state: HUD, nav, briefings, market, log
-  engine.ts      WebGL2 renderer, flight model, cameras, input
+  engine.ts      Simulation: flight model, autopilot, orbits, laps, HUD projection
+  renderer.ts    Draws each frame: WebGL2, or a 2D canvas fallback
+  shaders/       GLSL for the background, stars, planets, ship, and trail
+  input.ts       Pointer, keys, wheel, and gaze, turned into a steering stick
+  camera.ts      Where the camera sits for each view
+  flight.ts      Orbit and capture geometry
+  hud.ts         Range text and the minimap plot
+  types.ts       The engine's public types
+  gl.ts, ship-mesh.ts, math.ts   Shader linking, the ship model, shared math
   system.ts      Solar-system bodies, chapters, orbit math
   journey.ts     Places beyond the Sun
   tasks.ts       Flight-log challenge detection
