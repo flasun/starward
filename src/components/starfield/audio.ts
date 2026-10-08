@@ -52,6 +52,28 @@ export class DriftAudio {
     this.noiseFilter.frequency.setTargetAtTime(90 + speed * 1.2 + boost * 280, t, 0.12);
   }
 
+  /** Short bell for a reward: a rising fifth for a charted place, a triad for a flight-log entry. */
+  chime(kind: "chart" | "task", muted: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx || muted || ctx.state !== "running") return;
+    const notes = kind === "chart" ? [659.25, 987.77] : [523.25, 659.25, 783.99];
+    const t0 = ctx.currentTime + 0.01;
+    notes.forEach((freq, i) => {
+      const at = t0 + i * 0.11;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.07, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.9);
+      // Straight to the output: the drone's low-pass would swallow a bell.
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(at);
+      osc.stop(at + 0.95);
+    });
+  }
+
   dispose(): void {
     const ctx = this.ctx;
     this.ctx = null;

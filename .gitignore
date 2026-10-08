@@ -3,3 +3,12 @@ node_modules/
 .github_repo
 .env
 .env.*
+
+# Build output. Every deploy regenerates it.
+.vercel/output/
+.output/
+.wrangler/
+
+# QA screenshots stay local.
+screenshots/*
+!screenshots/.gitkeep

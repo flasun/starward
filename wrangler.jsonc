@@ -1,0 +1,14 @@
+// Cloudflare Workers settings for `npm run build:cloudflare`.
+// Nitro merges this into the generated .output/server/wrangler.json and sets
+// `main` and `assets` itself, so they don't belong here. Deploy with
+// `npm run deploy:cloudflare` or Workers Builds (see README).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "starward",
+  "compatibility_date": "2026-10-06",
+  "compatibility_flags": ["nodejs_compat"],
+  // Serves at starward.<your-subdomain>.workers.dev. For a custom domain, add
+  // "routes": [{ "pattern": "your.domain", "custom_domain": true }].
+  "workers_dev": true,
+  "observability": { "enabled": true }
+}

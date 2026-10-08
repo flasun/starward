@@ -404,6 +404,19 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Remounts on every new count, so the number pops when it climbs. */
+.chart.is-count {
+  display: inline-block;
+  animation: count-pop 600ms var(--ease-smooth-out);
+}
+
+@keyframes count-pop {
+  30% {
+    transform: scale(1.3);
+    color: var(--color-fg);
+  }
+}
+
 .readout {
   text-align: right;
 }
@@ -808,6 +821,74 @@
   color: var(--color-fg);
   font-size: 0.8125rem;
   letter-spacing: 0.01em;
+}
+
+.toasts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.toast {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  margin: 0 0 var(--space-3);
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--radius-2xl);
+  background: color-mix(in oklab, var(--color-elev) 88%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  text-align: center;
+  animation: toast-in var(--motion-fast) var(--ease-smooth-out);
+}
+
+.toast strong {
+  color: var(--color-fg);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.toast span {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
+.toast.is-reward {
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 1.5rem color-mix(in oklab, var(--color-accent) 22%, transparent);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-y-small)) scale(0.96);
+  }
+}
+
+/* A ring that spreads off a label the moment its place is charted. */
+.marker.is-new::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 1.5px var(--color-accent);
+  pointer-events: none;
+  animation: marker-ping 1.2s var(--ease-smooth-out) forwards;
+}
+
+@keyframes marker-ping {
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+.hint .hint-skip {
+  background: transparent;
+  color: var(--color-muted);
+  box-shadow: inset 0 0 0 1px var(--color-line);
 }
 
 .brief {
@@ -1319,6 +1400,13 @@
 
   .actions button:active {
     transform: none;
+  }
+
+  /* Rewards still show, they just don't move. */
+  .chart.is-count,
+  .toast,
+  .marker.is-new::after {
+    animation: none;
   }
 }
 

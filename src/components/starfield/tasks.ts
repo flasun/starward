@@ -79,6 +79,8 @@ export type TaskContext = {
   dt: number;
   speed: number;
   autopilot: boolean;
+  /** The player is flying: they have touched a control and autopilot is off. */
+  earned: boolean;
   view: string;
   yaw: number;
   pitch: number;
@@ -99,8 +101,9 @@ function hypot(x: number, y: number, z = 0): number {
 
 export function stepTasks(memory: TaskMemory, ctx: TaskContext): TaskId | null {
   let hit: TaskId | null = null;
+  // Tracking below still runs every frame; only the award waits for the player.
   const mark = (id: TaskId) => {
-    if (memory.done[id] || hit) return;
+    if (!ctx.earned || memory.done[id] || hit) return;
     memory.done[id] = true;
     hit = id;
   };
