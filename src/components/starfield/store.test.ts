@@ -1,0 +1,250 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { SAVE_KEY, freshSave, type SaveStorage } from "./saves.ts";
+import { AWAY_MS, FIRST_FLIGHT, createGameStore, keepSaved, paramsOf, saveOf } from "./store.ts";
+import { navIn } from "./system.ts";
+import { HOLD_MAX, STATION_COST, STATION_LIMIT, priceOf } from "./trade.ts";
+
+const NOW = 1_800_000_000_000;
+
+function memory(): SaveStorage & { writes: string[] } {
+  const writes: string[] = [];
+  return { writes, getItem: () => null, setItem: (key, value) => void (key === SAVE_KEY && writes.push(value)) };
+}
+
+describe("load", () => {
+  it("takes in a save and round-trips it", () => {
+    const store = createGameStore(NOW);
+    const save = { ...freshSave(NOW), charted: ["earth"], helpSeen: true };
+    store.getState().load(save, NOW);
+    assert.deepEqual(saveOf(store.getState()), save);
+  });
+
+  it("pays stations for the time away and says so after a minute", () => {
+    const store = createGameStore(NOW);
+    const save = freshSave(NOW - 10 * 60_000);
+    save.trade.depots = [{ id: "d", x: 0, z: 0 }];
+    store.getState().load(save, NOW);
+    const { credits, paid, toasts } = store.getState();
+    assert.ok(credits > save.trade.credits);
+    assert.equal(paid, NOW);
+    assert.equal(toasts.length, 1);
+    assert.match(toasts[0]!.title, /Cr$/);
+  });
+
+  it("stays quiet about a short absence", () => {
+    const store = createGameStore(NOW);
+    const save = freshSave(NOW - AWAY_MS / 2);
+    save.trade.depots = [{ id: "d", x: 0, z: 0 }];
+    store.getState().load(save, NOW);
+    assert.equal(store.getState().toasts.length, 0);
+  });
+});
+
+describe("keepSaved", () => {
+  it("writes when saved state changes, and not for anything else", () => {
+    const store = createGameStore(NOW);
+    const storage = memory();
+    const stop = keepSaved(store, storage);
+    store.setState({ nearId: "earth", alert: "Paused", navOpen: true });
+    assert.equal(storage.writes.length, 0);
+    store.getState().setSpeed(0.9);
+    assert.equal(storage.writes.length, 1);
+    assert.equal(JSON.parse(storage.writes[0]!).settings.speed, 0.9);
+    stop();
+    store.getState().setSpeed(0.1);
+    assert.equal(storage.writes.length, 1);
+  });
+});
+
+describe("flight", () => {
+  it("hands the engine the flight params", () => {
+    const store = createGameStore(NOW);
+    store.getState().flyTo("mars");
+    const params = paramsOf(store.getState());
+    assert.equal(params.targetId, "mars");
+    assert.equal(params.autopilot, true);
+    assert.equal(params.focus, true);
+    assert.equal(params.orbit, false);
+  });
+
+  it("leaves boost and autopilot when an orbit starts", () => {
+    const store = createGameStore(NOW);
+    store.setState({ boost: true, autopilot: true, focus: true });
+    store.getState().toggleOrbit();
+    assert.deepEqual(pick(store.getState()), { orbit: true, boost: false, autopilot: false, focus: false });
+    store.getState().toggleOrbit();
+    assert.equal(store.getState().orbit, false);
+  });
+
+  it("toggles an orbit height, and the active height again leaves", () => {
+    const store = createGameStore(NOW);
+    store.getState().pickOrbit("moon", 2);
+    assert.deepEqual([store.getState().targetId, store.getState().orbitLevel, store.getState().orbit], ["moon", 2, true]);
+    store.getState().pickOrbit("moon", 2);
+    assert.equal(store.getState().orbit, false);
+  });
+
+  it("flies to a double-tapped world and orbits it, and lets go on a second tap", () => {
+    const store = createGameStore(NOW);
+    store.getState().focusOn("jupiter");
+    assert.deepEqual(pick(store.getState()), { orbit: true, boost: false, autopilot: true, focus: true });
+    store.getState().focusOn("jupiter");
+    assert.deepEqual(pick(store.getState()), { orbit: false, boost: false, autopilot: false, focus: false });
+  });
+
+  it("drops an orbit when boost or Go is pressed", () => {
+    const store = createGameStore(NOW);
+    store.getState().orbitAt("earth");
+    store.getState().toggleBoost();
+    assert.deepEqual([store.getState().boost, store.getState().orbit], [true, false]);
+    store.getState().orbitAt("earth");
+    store.getState().toggleAutopilot();
+    assert.deepEqual([store.getState().autopilot, store.getState().orbit], [true, false]);
+  });
+
+  it("steps the camera through every view, and Above through three perches", () => {
+    const store = createGameStore(NOW);
+    const seen: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      store.getState().cycleView();
+      const { view, aboveSide } = store.getState();
+      seen.push(view === "above" ? `above${aboveSide}` : view);
+    }
+    assert.deepEqual(seen, ["chase", "left", "right", "above-1", "above0", "above1", "cockpit", "chase"]);
+  });
+
+  it("moves to the next place in the nav and puts away the brief", () => {
+    const store = createGameStore(NOW);
+    const nav = navIn("sun");
+    store.setState({ nearId: nav[0]!.id, navOpen: true });
+    store.getState().flyNext();
+    assert.equal(store.getState().targetId, nav[1]!.id);
+    assert.equal(store.getState().dismissed, nav[0]!.id);
+    store.getState().stepTour();
+    assert.equal(store.getState().targetId, nav[2]!.id);
+    assert.equal(store.getState().navOpen, false);
+  });
+});
+
+describe("progress", () => {
+  it("charts a place once", () => {
+    const store = createGameStore(NOW);
+    assert.equal(store.getState().chart("earth"), true);
+    assert.equal(store.getState().chart("earth"), false);
+    assert.deepEqual(store.getState().charted, ["earth"]);
+  });
+
+  it("walks the First flight stop by stop, then hands back the controls", () => {
+    const store = createGameStore(NOW);
+    store.getState().startFirstFlight();
+    assert.equal(store.getState().targetId, FIRST_FLIGHT[0]);
+    store.getState().chart(FIRST_FLIGHT[0]!);
+    assert.equal(store.getState().targetId, FIRST_FLIGHT[1]);
+    assert.equal(store.getState().autopilot, true);
+    store.getState().chart(FIRST_FLIGHT[1]!);
+    store.getState().chart(FIRST_FLIGHT[2]!);
+    assert.equal(store.getState().tour, null);
+    assert.equal(store.getState().autopilot, false);
+    assert.match(store.getState().coach, /done/);
+  });
+
+  it("logs a task once, and only a real one", () => {
+    const store = createGameStore(NOW);
+    assert.equal(store.getState().logTask("soft", 12), true);
+    assert.equal(store.getState().logTask("soft", 30), false);
+    assert.equal(store.getState().logTask("made-up", 1), false);
+    assert.deepEqual(store.getState().log, [{ id: "soft", seconds: 12 }]);
+  });
+});
+
+describe("trade", () => {
+  it("buys while there is money and room, and sells what is held", () => {
+    const store = createGameStore(NOW);
+    const cost = priceOf("mars", "water");
+    store.setState({ nearId: "mars", credits: cost * 2 });
+    store.getState().buy("water");
+    store.getState().buy("water");
+    store.getState().buy("water");
+    assert.equal(store.getState().hold.water, 2);
+    assert.equal(store.getState().credits, 0);
+    store.getState().sell("water");
+    assert.equal(store.getState().hold.water, 1);
+    assert.equal(store.getState().credits, cost);
+    store.setState({ credits: 1e6, hold: { minerals: HOLD_MAX, water: 0, tech: 0 } });
+    store.getState().buy("tech");
+    assert.equal(store.getState().hold.tech, 0);
+  });
+
+  it("does not trade away from a world", () => {
+    const store = createGameStore(NOW);
+    store.getState().buy("water");
+    assert.equal(store.getState().hold.water, 0);
+  });
+
+  it("deploys stations in open space, logs the haul and the lane, and stops at the limit", () => {
+    const store = createGameStore(NOW);
+    store.setState({ credits: STATION_COST * (STATION_LIMIT + 1), moreOpen: true });
+    for (let i = 0; i < STATION_LIMIT + 1; i++) store.getState().deployStation({ x: i, z: 0 }, NOW + i);
+    const { depots, log, moreOpen, credits } = store.getState();
+    assert.equal(depots.length, STATION_LIMIT);
+    assert.equal(credits, STATION_COST);
+    assert.deepEqual(log.map((entry) => entry.id), ["haul", "lane"]);
+    assert.equal(moreOpen, false);
+  });
+
+  it("will not deploy near a world or outside the solar system", () => {
+    const store = createGameStore(NOW);
+    store.setState({ credits: STATION_COST * 3, nearId: "earth" });
+    store.getState().deployStation({ x: 0, z: 0 }, NOW);
+    store.setState({ nearId: "", chapterId: "stars" });
+    store.getState().deployStation({ x: 0, z: 0 }, NOW);
+    assert.equal(store.getState().depots.length, 0);
+  });
+
+  it("pays stations as time passes", () => {
+    const store = createGameStore(NOW);
+    store.setState({ depots: [{ id: "d", x: 0, z: 0 }], paid: NOW, credits: 0 });
+    store.getState().payStations(NOW + 100_000);
+    assert.ok(store.getState().credits > 0);
+    assert.equal(store.getState().paid, NOW + 100_000);
+  });
+});
+
+describe("panels", () => {
+  it("closes the top panel on Escape, and pauses when none is open", () => {
+    const store = createGameStore(NOW);
+    store.setState({ lesson: 2, logOpen: true, moreOpen: true, navOpen: true });
+    const steps: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      store.getState().back();
+      const { lesson, logOpen, moreOpen, navOpen, paused } = store.getState();
+      steps.push(`${lesson}${+logOpen}${+moreOpen}${+navOpen}${+paused}`);
+    }
+    assert.deepEqual(steps, ["null1110", "null0110", "null0010", "null0000", "null0001", "null0000"]);
+    assert.equal(store.getState().helpSeen, true);
+  });
+
+  it("keeps nav and More apart, and Help and Log apart", () => {
+    const store = createGameStore(NOW);
+    store.getState().toggleNav();
+    store.getState().toggleMore();
+    assert.deepEqual([store.getState().navOpen, store.getState().moreOpen], [false, true]);
+    store.getState().openHelp();
+    store.getState().toggleLog();
+    assert.deepEqual([store.getState().lesson, store.getState().logOpen], [null, true]);
+  });
+
+  it("queues notes and drops them in order", () => {
+    const store = createGameStore(NOW);
+    store.getState().notify("One");
+    store.getState().notify("Two", "detail", true);
+    assert.deepEqual(store.getState().toasts.map((toast) => toast.title), ["One", "Two"]);
+    store.getState().dropToast();
+    assert.deepEqual(store.getState().toasts.map((toast) => [toast.title, toast.reward]), [["Two", true]]);
+  });
+});
+
+function pick(state: { orbit: boolean; boost: boolean; autopilot: boolean; focus: boolean }) {
+  return { orbit: state.orbit, boost: state.boost, autopilot: state.autopilot, focus: state.focus };
+}

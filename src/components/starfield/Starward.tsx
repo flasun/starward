@@ -1,41 +1,34 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Slider from "@radix-ui/react-slider";
 import { Volume2, VolumeX } from "lucide-react";
-import { StarfieldEngine, type CameraView, type FrameMarker, type PlotBlip, type StarfieldHooks, type StarfieldParams } from "@/components/starfield/engine";
+import { useStore } from "zustand";
+import { StarfieldEngine, type CameraView, type FrameMarker, type PlotBlip, type StarfieldHooks } from "@/components/starfield/engine";
 import { startGaze } from "@/components/starfield/gaze";
-import { clamp01 } from "@/components/starfield/math";
-import { carryOldSaves } from "@/components/starfield/saves";
-import { CHAPTERS, type BodyDef, bodiesIn, bodyById, chapterById, chapterDone, chapterOpen, goalsIn } from "@/components/starfield/system";
-import { TASKS } from "@/components/starfield/tasks";
+import { browserStorage, loadSave, writeSave } from "@/components/starfield/saves";
+import { createGameStore, keepSaved, paramsOf, saveOf } from "@/components/starfield/store";
 import {
-  GOODS,
-  HOLD_MAX,
-  START_CREDITS,
-  STATION_COST,
-  STATION_LIMIT,
-  type Depot,
-  type GoodId,
-  type Hold,
-  canDock,
-  emptyHold,
-  holdUnits,
-  priceOf,
-  stationPay,
-} from "@/components/starfield/trade";
+  CHAPTERS,
+  type BodyDef,
+  bodiesIn,
+  bodyById,
+  chapterById,
+  chapterDone,
+  chapterOpen,
+  goalsIn,
+  isChartable,
+  navIn,
+  nextInNav,
+} from "@/components/starfield/system";
+import { TASKS } from "@/components/starfield/tasks";
+import { GOODS, HOLD_MAX, STATION_COST, STATION_LIMIT, canDock, holdUnits, priceOf } from "@/components/starfield/trade";
 
-const STORAGE = "starward-settings";
-const SURVEY = "starward-survey";
-const HELP = "starward-help";
-const LOG = "starward-log";
-const CHAPTER_KEY = "starward-chapter";
-const TRADE_KEY = "starward-trade";
-const VIEWS: { id: CameraView; label: string; tip: string }[] = [
-  { id: "cockpit", label: "Cockpit", tip: "Look out the nose" },
-  { id: "chase", label: "Chase", tip: "Camera behind the ship" },
-  { id: "left", label: "Left", tip: "Camera off the left wing" },
-  { id: "right", label: "Right", tip: "Camera off the right wing" },
-  { id: "above", label: "Above", tip: "Overhead. Each press steps left, center, then right." },
-];
+const VIEWS: Record<CameraView, { label: string; tip: string }> = {
+  cockpit: { label: "Cockpit", tip: "Look out the nose" },
+  chase: { label: "Chase", tip: "Camera behind the ship" },
+  left: { label: "Left", tip: "Camera off the left wing" },
+  right: { label: "Right", tip: "Camera off the right wing" },
+  above: { label: "Above", tip: "Overhead. Each press steps left, center, then right." },
+};
 const LESSONS = [
   {
     title: "Look around",
@@ -59,20 +52,10 @@ const LESSONS = [
   },
 ];
 
-const FIRST_FLIGHT = ["earth", "moon", "mars"];
-
-/** One message at a time. Rewards hold a little longer than notes. */
-type Toast = { id: number; title: string; detail?: string; reward: boolean };
 const TOAST_MS = 2600;
 const REWARD_MS = 3400;
-/** Away this long before station earnings get a welcome-back note. */
-const AWAY_MS = 60_000;
 
 type BodyNav = BodyDef[];
-
-function isChartable(id: string): boolean {
-  return CHAPTERS.some((chapter) => goalsIn(chapter.id).some((body) => body.id === id));
-}
 
 function navSections(bodies: BodyNav) {
   const sections: { group: string; bodies: BodyNav }[] = [];
@@ -85,6 +68,46 @@ function navSections(bodies: BodyNav) {
 }
 
 export function Starward() {
+  const [store] = useState(createGameStore);
+  const game = useStore(store);
+  const {
+    speed,
+    density,
+    muted,
+    view,
+    aboveSide,
+    charted,
+    chapterId,
+    log,
+    credits,
+    hold,
+    depots,
+    boost,
+    targetId,
+    autopilot,
+    orbit,
+    orbitLevel,
+    paused,
+    hint,
+    error,
+    navOpen,
+    moreOpen,
+    mapOpen,
+    atlasOpen,
+    logOpen,
+    lesson,
+    offerOpen,
+    full,
+    noseLevel,
+    nearId,
+    dismissed,
+    alert,
+    coach,
+    gazeOn,
+    gazeNote,
+    toasts,
+  } = game;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLElement>(null);
   const warpRef = useRef<HTMLSpanElement>(null);
@@ -103,9 +126,11 @@ export function Starward() {
   const touchedAt = useRef(0);
   const lockedAt = useRef(0);
   const wasLocked = useRef(false);
+  const shipAt = useRef({ x: 0, z: 0 });
+  const linkedTarget = useRef<string | null>(null);
   const engineRef = useRef<StarfieldEngine | null>(null);
   const hooksRef = useRef<StarfieldHooks>({
-    getParams: () => paramsRef.current,
+    getParams: () => paramsOf(store.getState()),
     onSpeed: () => {},
     onToggleBoost: () => {},
     onFrame: () => {},
@@ -119,141 +144,22 @@ export function Starward() {
     onEndLap: () => {},
     onTask: () => {},
   });
-  const paramsRef = useRef<StarfieldParams>({
-    speed: 0.42,
-    density: 0.52,
-    boost: false,
-    muted: false,
-    reducedMotion: false,
-    targetId: "earth",
-    autopilot: false,
-    focus: false,
-    orbit: false,
-    orbitLevel: 1,
-    view: "cockpit",
-    aboveSide: -1,
-    paused: false,
-    depots: [],
-  });
 
-  const [speed, setSpeed] = useState(0.42);
-  const [density, setDensity] = useState(0.52);
-  const [boost, setBoost] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [reduced, setReduced] = useState(false);
-  const [hint, setHint] = useState(true);
-  const [error, setError] = useState("");
-  const [targetId, setTargetId] = useState("earth");
-  const [autopilot, setAutopilot] = useState(false);
-  const [orbit, setOrbit] = useState(false);
-  const [orbitLevel, setOrbitLevel] = useState(1);
-  const [focus, setFocus] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [noseLevel, setNoseLevel] = useState(false);
-  const [nearId, setNearId] = useState("");
-  const [dismissed, setDismissed] = useState("");
-  const [alert, setAlert] = useState("");
-  const [charted, setCharted] = useState<string[]>([]);
-  const [chapterId, setChapterId] = useState("sun");
-  const [mapOpen, setMapOpen] = useState(false);
-  const [view, setView] = useState<CameraView>("cockpit");
-  const [aboveSide, setAboveSide] = useState<-1 | 0 | 1>(-1);
-  const [full, setFull] = useState(false);
-  const [lesson, setLesson] = useState<number | null>(null);
-  const [logOpen, setLogOpen] = useState(false);
-  const [log, setLog] = useState<{ id: string; seconds: number }[]>([]);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const toastSeq = useRef(0);
-  const [offerOpen, setOfferOpen] = useState(true);
-  const [credits, setCredits] = useState(START_CREDITS);
-  const [hold, setHold] = useState<Hold>(emptyHold);
-  const [depots, setDepots] = useState<Depot[]>([]);
-  const [paused, setPaused] = useState(false);
-  const [atlasOpen, setAtlasOpen] = useState(false);
-  const shipAt = useRef({ x: 0, z: 0 });
-  const paidAt = useRef(Date.now());
-  const [gazeOn, setGazeOn] = useState(false);
-  const [gazeNote, setGazeNote] = useState("");
-  const [coach, setCoach] = useState("");
-  const tourRef = useRef<string[] | null>(null);
-  const linkedTarget = useRef<string | null>(null);
-
-  const notify = useCallback((title: string, detail?: string, reward = false) => {
-    toastSeq.current += 1;
-    const id = toastSeq.current;
-    setToasts((queue) => [...queue, { id, title, detail, reward }]);
-  }, []);
-
-  paramsRef.current = {
-    speed,
-    density,
-    boost,
-    muted,
-    reducedMotion: reduced,
-    targetId,
-    autopilot,
-    focus,
-    orbit,
-    orbitLevel,
-    view,
-    aboveSide,
-    paused,
-    depots,
-  };
-
-  hooksRef.current.getParams = () => paramsRef.current;
-  hooksRef.current.onSpeed = (next) => setSpeed(clamp01(next));
-  hooksRef.current.onToggleBoost = () => {
-    setOrbit(false);
-    setBoost((value) => !value);
-  };
-  hooksRef.current.onCancelAutopilot = () => setAutopilot(false);
-  hooksRef.current.onCancelOrbit = () => setOrbit(false);
-  hooksRef.current.onFocus = (id) => {
-    const same = paramsRef.current.targetId === id && paramsRef.current.orbit;
-    if (same) {
-      setOrbit(false);
-      setFocus(false);
-      setAutopilot(false);
-      return;
-    }
-    setTargetId(id);
-    setOrbit(true);
-    setBoost(false);
-    setAutopilot(true);
-    setFocus(true);
-  };
-  hooksRef.current.onCancelFocus = () => setFocus(false);
-  hooksRef.current.onBeginLap = (id) => {
-    setTargetId(id);
-    setOrbit(true);
-    setBoost(false);
-    setAutopilot(false);
-    setFocus(false);
-  };
-  hooksRef.current.onEndLap = () => {
-    setOrbit(false);
-    setBoost(true);
-    setAutopilot(false);
-  };
-  hooksRef.current.onToggleOrbit = () => {
-    setOrbit((value) => {
-      const next = !value;
-      if (next) {
-        setBoost(false);
-        setAutopilot(false);
-        setFocus(false);
-      }
-      return next;
-    });
-  };
-  hooksRef.current.onError = (message) => setError(message);
+  hooksRef.current.getParams = () => paramsOf(store.getState());
+  hooksRef.current.onSpeed = game.setSpeed;
+  hooksRef.current.onToggleBoost = game.toggleBoost;
+  hooksRef.current.onCancelAutopilot = () => store.setState({ autopilot: false });
+  hooksRef.current.onCancelOrbit = () => store.setState({ orbit: false });
+  hooksRef.current.onFocus = game.focusOn;
+  hooksRef.current.onCancelFocus = () => store.setState({ focus: false });
+  hooksRef.current.onBeginLap = game.orbitAt;
+  hooksRef.current.onEndLap = game.endLap;
+  hooksRef.current.onToggleOrbit = game.toggleOrbit;
+  hooksRef.current.onError = (message) => store.setState({ error: message });
   hooksRef.current.onTask = (id, seconds) => {
-    if (log.some((entry) => entry.id === id)) return;
-    setLog((prev) => (prev.some((entry) => entry.id === id) ? prev : [...prev, { id, seconds }]));
+    if (!game.logTask(id, seconds)) return;
     const name = TASKS.find((task) => task.id === id)?.name ?? "Task";
-    notify(name, `Flight log · ${log.length + 1} of ${TASKS.length}`, true);
+    game.notify(name, `Flight log · ${store.getState().log.length} of ${TASKS.length}`, true);
     engineRef.current?.chime("task");
   };
   hooksRef.current.onFrame = (snap) => {
@@ -292,58 +198,35 @@ export function Starward() {
     }
     if (snap.leveling !== levelSeen.current) {
       levelSeen.current = snap.leveling;
-      setNoseLevel(snap.leveling);
+      store.setState({ noseLevel: snap.leveling });
     }
     paintMarkers(snap.markers);
     // Nothing counts until the player has touched a control.
     if (snap.engaged && snap.chartId !== chartSeen.current) {
       chartSeen.current = snap.chartId;
-      if (snap.chartId && bodyById(snap.chartId).goal) {
-        const chartId = snap.chartId;
-        if (!charted.includes(chartId)) celebrateChart(chartId);
-        setCharted((prev) => {
-          if (prev.includes(chartId)) return prev;
-          const tour = tourRef.current;
-          const index = tour ? tour.indexOf(chartId) : -1;
-          const next = index >= 0 ? tour?.[index + 1] : undefined;
-          if (next) {
-            queueMicrotask(() => {
-              setTargetId(next);
-              setOrbit(false);
-              setBoost(false);
-              setAutopilot(true);
-              setFocus(true);
-              setCoach(`Next: ${bodyById(next).name}.`);
-            });
-          } else if (index >= 0) {
-            tourRef.current = null;
-            queueMicrotask(() => {
-              setAutopilot(false);
-              setCoach("First flight done. Pick the next world.");
-            });
-          }
-          return [...prev, chartId];
-        });
+      const chartId = snap.chartId;
+      if (chartId && bodyById(chartId).goal && !store.getState().charted.includes(chartId)) {
+        celebrateChart(chartId);
+        game.chart(chartId);
       }
     }
     if (snap.nearId !== nearSeen.current) {
       nearSeen.current = snap.nearId;
-      setNearId(snap.nearId);
-      if (!snap.nearId) setDismissed("");
+      store.setState(snap.nearId ? { nearId: snap.nearId } : { nearId: "", dismissed: "" });
     }
     if (snap.alert !== alertSeen.current) {
       alertSeen.current = snap.alert;
-      setAlert(snap.alert);
+      store.setState({ alert: snap.alert });
     }
   };
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setReduced(mq.matches);
+    const apply = () => store.setState({ reducedMotion: mq.matches });
     apply();
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
-  }, []);
+  }, [store]);
 
   useEffect(() => {
     const bump = () => {
@@ -359,123 +242,30 @@ export function Starward() {
     };
   }, []);
 
-  // Before any load below, so saves from the Slipstream name are found.
+  // Load after mount, so the server render and the first client render match. Nothing is
+  // written until the save has been read.
   useEffect(() => {
-    carryOldSaves();
-  }, []);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { speed?: unknown; density?: unknown; muted?: unknown; view?: unknown; aboveSide?: unknown };
-      if (typeof parsed.speed === "number") setSpeed(clamp01(parsed.speed));
-      if (typeof parsed.density === "number") setDensity(clamp01(parsed.density));
-      if (typeof parsed.muted === "boolean") setMuted(parsed.muted);
-      if (parsed.view === "wing") setView("left");
-      if (parsed.view === "cockpit" || parsed.view === "chase" || parsed.view === "left" || parsed.view === "right" || parsed.view === "above") setView(parsed.view);
-      if (parsed.aboveSide === -1 || parsed.aboveSide === 0 || parsed.aboveSide === 1) setAboveSide(parsed.aboveSide);
-    } catch {
-      /* ignore broken storage */
-    }
-  }, []);
-
-  const skipSave = useRef(true);
-  useEffect(() => {
-    if (skipSave.current) {
-      skipSave.current = false;
-      return;
-    }
-    localStorage.setItem(STORAGE, JSON.stringify({ speed, density, muted, view, aboveSide }));
-  }, [speed, density, muted, view, aboveSide]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SURVEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) return;
-      const ids = parsed.filter((id): id is string => typeof id === "string" && isChartable(id));
-      setCharted(ids);
-      const saved = localStorage.getItem(CHAPTER_KEY);
-      if (typeof saved === "string" && CHAPTERS.some((chapter) => chapter.id === saved) && chapterOpen(saved, ids)) {
-        setChapterId(saved);
+    const storage = browserStorage();
+    const now = Date.now();
+    store.getState().load(loadSave(storage, now), now);
+    // A shared link flies to its place, if the save has opened that place's chapter.
+    const id = new URLSearchParams(window.location.search).get("target");
+    const chapter = id && isChartable(id) ? (bodyById(id).chapter ?? "sun") : null;
+    if (id && chapter && chapterOpen(chapter, store.getState().charted)) {
+      if (chapter !== "sun") {
+        linkedTarget.current = id;
+        store.setState({ chapterId: chapter });
       }
-    } catch {
-      /* ignore broken storage */
+      store.setState({ targetId: id, focus: true, autopilot: true });
     }
-  }, []);
-
-  const skipChapter = useRef(true);
-  useEffect(() => {
-    if (skipChapter.current) {
-      skipChapter.current = false;
-      return;
-    }
-    localStorage.setItem(CHAPTER_KEY, chapterId);
-  }, [chapterId]);
+    writeSave(storage, saveOf(store.getState()));
+    return keepSaved(store, storage);
+  }, [store]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(TRADE_KEY);
-      if (!raw) return;
-      const data = JSON.parse(raw) as {
-        credits?: unknown;
-        hold?: Partial<Hold>;
-        depots?: unknown;
-        paid?: unknown;
-      };
-      const nextHold = emptyHold();
-      if (data.hold && typeof data.hold === "object") {
-        for (const good of GOODS) {
-          const amount = data.hold[good.id];
-          if (typeof amount === "number" && amount > 0) nextHold[good.id] = Math.floor(amount);
-        }
-      }
-      const nextDepots = Array.isArray(data.depots)
-        ? data.depots.filter(
-            (item): item is Depot =>
-              Boolean(item) &&
-              typeof item === "object" &&
-              typeof (item as Depot).id === "string" &&
-              typeof (item as Depot).x === "number" &&
-              typeof (item as Depot).z === "number",
-          )
-        : [];
-      const paid = typeof data.paid === "number" ? data.paid : Date.now();
-      const purse = typeof data.credits === "number" ? data.credits : START_CREDITS;
-      const income = stationPay(nextDepots.length, paid, Date.now());
-      paidAt.current = income.at;
-      setCredits(Math.max(0, Math.floor(purse + income.gain)));
-      if (income.gain > 0 && Date.now() - paid >= AWAY_MS) {
-        notify(`+${income.gain.toLocaleString()} Cr`, "Your stations earned this while you were away.", true);
-      }
-      setHold(nextHold);
-      setDepots(nextDepots.slice(0, STATION_LIMIT));
-    } catch {
-      /* ignore broken storage */
-    }
-  }, [notify]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      TRADE_KEY,
-      JSON.stringify({ credits, hold, depots, paid: paidAt.current }),
-    );
-  }, [credits, hold, depots]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (depots.length === 0) {
-        paidAt.current = Date.now();
-        return;
-      }
-      const income = stationPay(depots.length, paidAt.current, Date.now());
-      paidAt.current = income.at;
-      if (income.gain > 0) setCredits((value) => value + income.gain);
-    }, 5000);
+    const timer = window.setInterval(() => store.getState().payStations(Date.now()), 5000);
     return () => window.clearInterval(timer);
-  }, [depots.length]);
+  }, [depots.length, store]);
 
   const chapterBoot = useRef(true);
   useEffect(() => {
@@ -489,130 +279,35 @@ export function Starward() {
     linkedTarget.current = null;
     const linkedHere = linked && (bodyById(linked).chapter ?? "sun") === chapterId;
     engine.enter(chapterId);
-    const first = linkedHere ? linked : chapterById(chapterId).first;
-    setTargetId(first);
-    setOrbit(false);
-    setBoost(false);
-    setAutopilot(true);
-    setFocus(true);
-    setDismissed("");
-    setNavOpen(false);
-    setMapOpen(false);
-  }, [chapterId]);
-
-  const skipSurvey = useRef(true);
-  useEffect(() => {
-    if (skipSurvey.current) {
-      skipSurvey.current = false;
-      return;
-    }
-    localStorage.setItem(SURVEY, JSON.stringify(charted));
-  }, [charted]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LOG);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) return;
-      setLog(
-        parsed.filter(
-          (entry): entry is { id: string; seconds: number } =>
-            !!entry &&
-            typeof entry === "object" &&
-            typeof (entry as { id?: unknown }).id === "string" &&
-            typeof (entry as { seconds?: unknown }).seconds === "number" &&
-            TASKS.some((task) => task.id === (entry as { id: string }).id),
-        ),
-      );
-    } catch {
-      /* ignore broken storage */
-    }
-  }, []);
-
-  const skipLog = useRef(true);
-  useEffect(() => {
-    if (skipLog.current) {
-      skipLog.current = false;
-      return;
-    }
-    localStorage.setItem(LOG, JSON.stringify(log));
-  }, [log]);
+    store.getState().startChapter(linkedHere ? linked : chapterById(chapterId).first);
+  }, [chapterId, store]);
 
   useEffect(() => {
     if (!coach) return;
-    const timer = window.setTimeout(() => setCoach(""), 7000);
+    const timer = window.setTimeout(() => store.setState({ coach: "" }), 7000);
     return () => window.clearTimeout(timer);
-  }, [coach]);
+  }, [coach, store]);
 
   const toast = toasts[0];
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToasts((queue) => queue.slice(1)), toast.reward ? REWARD_MS : TOAST_MS);
+    const timer = window.setTimeout(() => store.getState().dropToast(), toast.reward ? REWARD_MS : TOAST_MS);
     return () => window.clearTimeout(timer);
-  }, [toast]);
-
-  const closeLesson = () => {
-    setLesson(null);
-    try {
-      localStorage.setItem(HELP, "seen");
-    } catch {
-      /* the lesson can still close */
-    }
-  };
-
-  useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("target");
-    if (!id || !isChartable(id)) return;
-    let ids: string[] = [];
-    try {
-      const raw = localStorage.getItem(SURVEY);
-      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
-      if (Array.isArray(parsed)) ids = parsed.filter((item): item is string => typeof item === "string");
-    } catch {
-      /* an unreadable save still allows the solar system */
-    }
-    const chapter = bodyById(id).chapter ?? "sun";
-    if (!chapterOpen(chapter, ids)) return;
-    if (chapter !== "sun") {
-      linkedTarget.current = id;
-      setChapterId(chapter);
-    }
-    setTargetId(id);
-    setFocus(true);
-    setAutopilot(true);
-  }, []);
+  }, [toast, store]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (lesson !== null) {
-        closeLesson();
-        return;
-      }
-      if (logOpen) {
-        setLogOpen(false);
-        return;
-      }
-      if (moreOpen) {
-        setMoreOpen(false);
-        return;
-      }
-      if (navOpen) {
-        setNavOpen(false);
-        return;
-      }
-      setPaused((value) => !value);
+      if (event.key === "Escape") store.getState().back();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [lesson, logOpen, moreOpen, navOpen]);
+  }, [store]);
 
   useEffect(() => {
-    const onChange = () => setFull(Boolean(document.fullscreenElement));
+    const onChange = () => store.setState({ full: Boolean(document.fullscreenElement) });
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
+  }, [store]);
 
   const toggleFull = () => {
     const node = stageRef.current;
@@ -639,16 +334,16 @@ export function Starward() {
   useEffect(() => {
     if (!gazeOn) {
       engineRef.current?.setGaze(0, 0, false);
-      setGazeNote("");
+      store.setState({ gazeNote: "" });
       return;
     }
     let stop = () => {};
     let dead = false;
-    setGazeNote("Starting gaze");
+    store.setState({ gazeNote: "Starting gaze" });
     void startGaze({
       onSample: (x, y) => engineRef.current?.setGaze(x, y, true),
       onStatus: (text) => {
-        if (!dead) setGazeNote(text);
+        if (!dead) store.setState({ gazeNote: text });
       },
     })
       .then((dispose) => {
@@ -657,18 +352,18 @@ export function Starward() {
       })
       .catch((err: unknown) => {
         if (dead) return;
-        setGazeOn(false);
-        notify(err instanceof Error ? err.message : "Gaze could not start.");
+        store.setState({ gazeOn: false });
+        store.getState().notify(err instanceof Error ? err.message : "Gaze could not start.");
       });
     return () => {
       dead = true;
       stop();
       engineRef.current?.setGaze(0, 0, false);
     };
-  }, [gazeOn, notify]);
+  }, [gazeOn, store]);
 
   useEffect(() => {
-    const hide = () => setHint(false);
+    const hide = () => store.setState({ hint: false });
     const timer = window.setTimeout(hide, 6400);
     window.addEventListener("pointerdown", hide, { once: true });
     window.addEventListener("keydown", hide, { once: true });
@@ -676,7 +371,7 @@ export function Starward() {
       window.clearTimeout(timer);
       window.removeEventListener("pointerdown", hide);
     };
-  }, []);
+  }, [store]);
 
   const markerRefCbs = useRef<Record<string, (node: HTMLSpanElement | null) => void>>({});
 
@@ -739,6 +434,7 @@ export function Starward() {
 
   /** The payoff for a new place: a card, a bell, a ring on its label, and a tap on phones. */
   function celebrateChart(id: string) {
+    const { chapterId, charted, notify } = store.getState();
     const goals = goalsIn(chapterId);
     const done = goals.filter((body) => body.id === id || charted.includes(body.id)).length;
     const here = chapterById(chapterId);
@@ -788,32 +484,13 @@ export function Starward() {
   const chapterCharted = chapterGoals.filter((body) => charted.includes(body.id)).length;
   const chapterReady = chapterDone(chapterId, charted);
   const nextChapter = chapter.next ? chapterById(chapter.next) : null;
-  const nav = bodiesIn(chapterId).filter((body) => body.nav);
+  const nav = navIn(chapterId);
   const target = bodyById(targetId);
   const nearBody = nearId ? bodyById(nearId) : null;
   const showBrief = Boolean(nearBody) && dismissed !== nearId;
   // Stays up until the player takes it, waves it off, or charts a place.
   const offer = offerOpen && charted.length === 0 && lesson === null && !autopilot;
-  const nextAfter = (id: string) => {
-    const index = nav.findIndex((body) => body.id === id);
-    return nav[(index + 1 + nav.length) % nav.length];
-  };
-  const nextStop = nearBody ? nextAfter(nearBody.id) : undefined;
-  const engageOrbit = (id: string) => {
-    setTargetId(id);
-    setOrbit(true);
-    setBoost(false);
-    setAutopilot(false);
-    setFocus(false);
-  };
-  const pickOrbit = (id: string, level: number) => {
-    if (orbit && targetId === id && orbitLevel === level) {
-      setOrbit(false);
-      return;
-    }
-    setOrbitLevel(level);
-    engageOrbit(id);
-  };
+  const nextStop = nearBody ? nextInNav(chapterId, nearBody.id) : undefined;
   const orbitLevels = (id: string) => (
     <div className="orbit-levels" role="group" aria-label="Orbit height">
       {(["Low", "Mid", "High"] as const).map((name, index) => (
@@ -822,104 +499,28 @@ export function Starward() {
           type="button"
           data-tip={`${name} orbit. Click the active height to leave.`}
           aria-pressed={orbit && targetId === id && orbitLevel === index}
-          onClick={() => pickOrbit(id, index)}
+          onClick={() => game.pickOrbit(id, index)}
         >
           {name}
         </button>
       ))}
     </div>
   );
-  const flyNext = () => {
-    if (!nearBody || !nextStop) return;
-    setTargetId(nextStop.id);
-    setOrbit(false);
-    setBoost(false);
-    setAutopilot(true);
-    setFocus(true);
-    setDismissed(nearBody.id);
-  };
-  const logTask = (id: string) => {
-    setLog((prev) => (prev.some((entry) => entry.id === id) ? prev : [...prev, { id, seconds: 0 }]));
-  };
-  const buyGood = (good: GoodId) => {
-    if (!nearBody) return;
-    const cost = priceOf(nearBody.id, good);
-    if (credits < cost || holdUnits(hold) >= HOLD_MAX) return;
-    setCredits((value) => value - cost);
-    setHold((value) => ({ ...value, [good]: value[good] + 1 }));
-  };
-  const sellGood = (good: GoodId) => {
-    if (!nearBody || hold[good] < 1) return;
-    setCredits((value) => value + priceOf(nearBody.id, good));
-    setHold((value) => ({ ...value, [good]: value[good] - 1 }));
-  };
-  const deployStation = () => {
-    if (nearId || chapterId !== "sun" || credits < STATION_COST || depots.length >= STATION_LIMIT) return;
-    const at = shipAt.current;
-    setCredits((value) => value - STATION_COST);
-    setDepots((value) => [...value, { id: `depot-${Date.now()}`, x: at.x, z: at.z }]);
-    logTask("haul");
-    if (depots.length + 1 >= 3) logTask("lane");
-    notify(
-      depots.length + 1 >= 3 ? "Three stations are paying you" : "Station deployed",
-      depots.length + 1 >= 3 ? undefined : "It earns while you fly.",
-    );
-    setMoreOpen(false);
-  };
-  const stepTour = () => {
-    const next = nextAfter(targetId);
-    if (!next || next.id === targetId) return;
-    setTargetId(next.id);
-    setOrbit(false);
-    setBoost(false);
-    setAutopilot(true);
-    setFocus(true);
-    if (nearId) setDismissed(nearId);
-    setNavOpen(false);
-  };
-  const startFirstFlight = () => {
-    tourRef.current = [...FIRST_FLIGHT];
-    setOfferOpen(false);
-    setHint(false);
-    setLesson(null);
-    setTargetId("earth");
-    setOrbit(false);
-    setBoost(false);
-    setAutopilot(true);
-    setFocus(true);
-    setPaused(false);
-    setCoach("First flight: Earth, then the Moon, then Mars.");
-  };
   const shareChart = () => {
     const url = new URL(window.location.href);
     url.searchParams.set("target", targetId);
     const text = `${chapterCharted} of ${chapterGoals.length} charted in Starward.`;
     const full = `${text} ${url.toString()}`;
-    const done = () => notify("Link copied");
+    const done = () => game.notify("Link copied");
     if (navigator.share) {
       void navigator.share({ title: "Starward", text, url: url.toString() }).catch(() => {
-        void navigator.clipboard?.writeText(full).then(done).catch(() => notify(full));
+        void navigator.clipboard?.writeText(full).then(done).catch(() => game.notify(full));
       });
       return;
     }
-    void navigator.clipboard?.writeText(full).then(done).catch(() => notify(full));
+    void navigator.clipboard?.writeText(full).then(done).catch(() => game.notify(full));
   };
   const aboveName = aboveSide < 0 ? "Above L" : aboveSide > 0 ? "Above R" : "Above";
-  const cycleView = () => {
-    if (view === "above") {
-      if (aboveSide < 1) {
-        setAboveSide((side) => (side < 0 ? 0 : 1));
-        return;
-      }
-      setAboveSide(-1);
-      setView("cockpit");
-      return;
-    }
-    const index = VIEWS.findIndex((item) => item.id === view);
-    const next = VIEWS[(index + 1) % VIEWS.length].id;
-    if (next === "above") setAboveSide(-1);
-    setView(next);
-  };
 
   return (
     <main ref={stageRef} className="stage" data-lesson={lesson === null ? undefined : lesson} aria-label="Starward">
@@ -952,7 +553,7 @@ export function Starward() {
               type="button"
               className="chapter-name"
               aria-expanded={mapOpen}
-              onClick={() => setMapOpen((open) => !open)}
+              onClick={() => store.setState({ mapOpen: !mapOpen })}
             >
               {chapter.name}
             </button>
@@ -986,10 +587,9 @@ export function Starward() {
                       type="button"
                       disabled={!open}
                       aria-current={item.id === chapterId ? "true" : undefined}
-                      onClick={() => {
-                        setMapOpen(false);
-                        if (open && item.id !== chapterId) setChapterId(item.id);
-                      }}
+                      onClick={() =>
+                        store.setState(open && item.id !== chapterId ? { mapOpen: false, chapterId: item.id } : { mapOpen: false })
+                      }
                     >
                       {item.name}
                       <span>{!open ? "Locked" : chapterDone(item.id, charted) ? "Charted" : "Open"}</span>
@@ -1001,11 +601,11 @@ export function Starward() {
           ) : null}
           <div className="top-actions">
             {nextChapter && chapterReady ? (
-              <button type="button" className="onward" onClick={() => setChapterId(nextChapter.id)}>
+              <button type="button" className="onward" onClick={() => store.setState({ chapterId: nextChapter.id })}>
                 Onward
               </button>
             ) : null}
-            <button type="button" className="help-btn" data-hud onClick={() => { setLesson(0); setLogOpen(false); }}>
+            <button type="button" className="help-btn" data-hud onClick={game.openHelp}>
               Help
             </button>
             <button
@@ -1013,10 +613,7 @@ export function Starward() {
               className="help-btn"
               data-hud
               aria-pressed={logOpen}
-              onClick={() => {
-                setLogOpen((open) => !open);
-                setLesson(null);
-              }}
+              onClick={game.toggleLog}
             >
               Log
             </button>
@@ -1063,7 +660,7 @@ export function Starward() {
         data-hud
         aria-expanded={atlasOpen}
         aria-label="Open the system map"
-        onClick={() => setAtlasOpen(true)}
+        onClick={() => store.setState({ atlasOpen: true })}
       >
         <svg className="plot" viewBox="0 0 100 100" aria-hidden="true">
           <circle className="plot-ring" cx="50" cy="50" r="46" />
@@ -1071,14 +668,14 @@ export function Starward() {
         </svg>
       </button>
       {atlasOpen ? (
-        <div className="atlas" data-hud role="presentation" onClick={() => setAtlasOpen(false)}>
+        <div className="atlas" data-hud role="presentation" onClick={() => store.setState({ atlasOpen: false })}>
           <div
             className="atlas-card"
             role="dialog"
             aria-label="System map"
             onClick={(event) => event.stopPropagation()}
           >
-            <button type="button" className="brief-close" onClick={() => setAtlasOpen(false)}>
+            <button type="button" className="brief-close" onClick={() => store.setState({ atlasOpen: false })}>
               Close
             </button>
             <svg className="atlas-map" viewBox="0 0 100 100">
@@ -1111,17 +708,17 @@ export function Starward() {
           <h2 id="lesson-title">{LESSONS[lesson].title}</h2>
           <p>{LESSONS[lesson].body}</p>
           <div className="lesson-actions">
-            <button type="button" onClick={closeLesson}>
+            <button type="button" onClick={game.closeLesson}>
               Skip
             </button>
             {lesson > 0 ? (
-              <button type="button" onClick={() => setLesson(lesson - 1)}>
+              <button type="button" onClick={() => store.setState({ lesson: lesson - 1 })}>
                 Back
               </button>
             ) : null}
             <button
               type="button"
-              onClick={() => (lesson + 1 >= LESSONS.length ? closeLesson() : setLesson(lesson + 1))}
+              onClick={() => (lesson + 1 >= LESSONS.length ? game.closeLesson() : store.setState({ lesson: lesson + 1 }))}
             >
               {lesson + 1 >= LESSONS.length ? "Fly" : "Next"}
             </button>
@@ -1137,7 +734,7 @@ export function Starward() {
               </p>
               <h2>Flight log</h2>
             </div>
-            <button type="button" className="brief-close" onClick={() => setLogOpen(false)}>
+            <button type="button" className="brief-close" onClick={() => store.setState({ logOpen: false })}>
               Close
             </button>
           </div>
@@ -1163,10 +760,10 @@ export function Starward() {
         {offer ? (
           <p className="hint">
             <span>Earth is selected. Press Go.</span>
-            <button type="button" className="hint-go" onClick={startFirstFlight}>
+            <button type="button" className="hint-go" onClick={game.startFirstFlight}>
               First flight
             </button>
-            <button type="button" className="hint-skip" onClick={() => setOfferOpen(false)}>
+            <button type="button" className="hint-skip" onClick={() => store.setState({ offerOpen: false })}>
               Not now
             </button>
           </p>
@@ -1191,7 +788,7 @@ export function Starward() {
           <article className="brief" data-hud>
             <div className="brief-top">
               <h2>{nearBody.name}</h2>
-              <button type="button" className="brief-close" onClick={() => setDismissed(nearBody.id)}>
+              <button type="button" className="brief-close" onClick={() => store.setState({ dismissed: nearBody.id })}>
                 Close
               </button>
             </div>
@@ -1213,12 +810,12 @@ export function Starward() {
             <div className="brief-actions">
               {orbitLevels(nearBody.id)}
               {orbit && targetId === nearBody.id ? (
-                <button type="button" className="brief-orbit" aria-pressed onClick={() => setOrbit(false)}>
+                <button type="button" className="brief-orbit" aria-pressed onClick={() => store.setState({ orbit: false })}>
                   Leave
                 </button>
               ) : null}
               {nextStop && nextStop.id !== nearBody.id ? (
-                <button type="button" className="brief-next" onClick={flyNext}>
+                <button type="button" className="brief-next" onClick={game.flyNext}>
                   Next · {nextStop.name}
                 </button>
               ) : null}
@@ -1231,10 +828,10 @@ export function Starward() {
                     <div key={good.id} className="market-row">
                       <span>{good.name}</span>
                       <b>{cost}</b>
-                      <button type="button" disabled={credits < cost || holdUnits(hold) >= HOLD_MAX} onClick={() => buyGood(good.id)}>
+                      <button type="button" disabled={credits < cost || holdUnits(hold) >= HOLD_MAX} onClick={() => game.buy(good.id)}>
                         Buy
                       </button>
-                      <button type="button" disabled={hold[good.id] < 1} onClick={() => sellGood(good.id)}>
+                      <button type="button" disabled={hold[good.id] < 1} onClick={() => game.sell(good.id)}>
                         Sell
                       </button>
                     </div>
@@ -1256,14 +853,14 @@ export function Starward() {
           {moreOpen ? (
             <div className="more-panel">
               <div className="actions">
-                <button type="button" data-tip="Burn harder for a while. Leaves an orbit." aria-pressed={boost} onClick={() => { setBoost((value) => !value); setOrbit(false); }}>
+                <button type="button" data-tip="Burn harder for a while. Leaves an orbit." aria-pressed={boost} onClick={game.toggleBoost}>
                   Boost
                 </button>
                 <button
                   type="button"
                   data-tip="Deploy in open space, away from a world. It pays you over time."
                   disabled={chapterId !== "sun" || Boolean(nearId) || credits < STATION_COST || depots.length >= STATION_LIMIT}
-                  onClick={deployStation}
+                  onClick={() => game.deployStation(shipAt.current, Date.now())}
                 >
                   Deploy · {STATION_COST}
                 </button>
@@ -1283,7 +880,7 @@ export function Starward() {
                   data-tip={muted ? "Turn the engine sound on" : "Turn the engine sound off"}
                   aria-pressed={!muted}
                   aria-label={muted ? "Unmute" : "Mute"}
-                  onClick={() => setMuted((value) => !value)}
+                  onClick={game.toggleMuted}
                 >
                   {muted ? <VolumeX size={16} strokeWidth={1.75} /> : <Volume2 size={16} strokeWidth={1.75} />}
                 </button>
@@ -1291,7 +888,7 @@ export function Starward() {
                   type="button"
                   data-tip="Steer by looking. The camera stays on this device."
                   aria-pressed={gazeOn}
-                  onClick={() => setGazeOn((on) => !on)}
+                  onClick={() => store.setState({ gazeOn: !gazeOn })}
                 >
                   Gaze
                 </button>
@@ -1314,7 +911,7 @@ export function Starward() {
                   max={1}
                   step={0.005}
                   value={[density]}
-                  onValueChange={([value]) => setDensity(clamp01(value ?? 0))}
+                  onValueChange={([value]) => game.setDensity(value ?? 0)}
                 >
                   <Slider.Track className="slider-track">
                     <Slider.Range className="slider-range" />
@@ -1337,13 +934,7 @@ export function Starward() {
                         <button
                           type="button"
                           aria-current={body.id === targetId ? "true" : undefined}
-                          onClick={() => {
-                            setTargetId(body.id);
-                            setOrbit(false);
-                            setAutopilot(false);
-                            setFocus(true);
-                            setNavOpen(false);
-                          }}
+                          onClick={() => game.pickTarget(body.id)}
                         >
                           {body.name}
                           <span>
@@ -1366,8 +957,8 @@ export function Starward() {
                           type="button"
                           className="nav-next"
                           data-tip="Fly to the next place"
-                          aria-label={`Next, fly to ${nextAfter(targetId)?.name ?? "the next place"}`}
-                          onClick={stepTour}
+                          aria-label={`Next, fly to ${nextInNav(chapterId, targetId)?.name ?? "the next place"}`}
+                          onClick={game.stepTour}
                         >
                           Next
                         </button>
@@ -1385,10 +976,7 @@ export function Starward() {
                 className="nav-target"
                 data-tip="Choose where to fly"
                 aria-expanded={navOpen}
-                onClick={() => {
-                  setNavOpen((open) => !open);
-                  setMoreOpen(false);
-                }}
+                onClick={game.toggleNav}
               >
                 {target.name}
                 <small ref={rangeRef}>—</small>
@@ -1399,10 +987,7 @@ export function Starward() {
                 className="go-btn"
                 aria-pressed={autopilot}
                 aria-label={autopilot ? `Stop flying to ${target.name}` : `Fly to ${target.name}`}
-                onClick={() => {
-                  setAutopilot((value) => !value);
-                  setOrbit(false);
-                }}
+                onClick={game.toggleAutopilot}
               >
                 {autopilot ? "Stop" : "Go"}
               </button>
@@ -1415,7 +1000,7 @@ export function Starward() {
                 max={1}
                 step={0.005}
                 value={[speed]}
-                onValueChange={([value]) => setSpeed(clamp01(value ?? 0))}
+                onValueChange={([value]) => game.setSpeed(value ?? 0)}
               >
                 <Slider.Track className="slider-track">
                   <Slider.Range className="slider-range" />
@@ -1428,11 +1013,11 @@ export function Starward() {
             <button
               type="button"
               className="view-cycle"
-              data-tip={view === "above" ? (aboveSide < 0 ? "Overhead, from the left" : aboveSide > 0 ? "Overhead, from the right" : "Overhead, from the center") : VIEWS.find((item) => item.id === view)?.tip}
-              aria-label={`Camera is ${view === "above" ? aboveName : VIEWS.find((item) => item.id === view)?.label}. Switch camera.`}
-              onClick={cycleView}
+              data-tip={view === "above" ? (aboveSide < 0 ? "Overhead, from the left" : aboveSide > 0 ? "Overhead, from the right" : "Overhead, from the center") : VIEWS[view].tip}
+              aria-label={`Camera is ${view === "above" ? aboveName : VIEWS[view].label}. Switch camera.`}
+              onClick={game.cycleView}
             >
-              {view === "above" ? aboveName : VIEWS.find((item) => item.id === view)?.label}
+              {view === "above" ? aboveName : VIEWS[view].label}
             </button>
             <button
               type="button"
@@ -1441,10 +1026,7 @@ export function Starward() {
               aria-pressed={moreOpen}
               aria-expanded={moreOpen}
               aria-label={moreOpen ? "Hide extra controls" : "Show extra controls"}
-              onClick={() => {
-                setMoreOpen((open) => !open);
-                setNavOpen(false);
-              }}
+              onClick={game.toggleMore}
             >
               {moreOpen ? "Less" : "More"}
             </button>

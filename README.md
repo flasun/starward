@@ -9,7 +9,7 @@ Fly a real solar system, then the near stars, the Milky Way, and the galaxy clus
 - **Flight log.** Eight challenges (soft arrival, slingshot, ring cut, eclipse, and more) are logged with your time.
 - **Trade and stations.** Buy goods where they are cheap, sell where they are dear, and deploy stations that pay while you fly.
 - **Cameras and steering.** Cockpit, chase, either wing, and overhead views. Three orbit heights, autopilot, and optional webcam gaze steering that runs on the device (MediaPipe).
-- **No account.** Progress saves in the browser.
+- **No account.** Progress saves in the browser, in one versioned `starward-save` entry.
 
 ### Controls
 
@@ -52,7 +52,8 @@ CI (`.github/workflows/ci.yml`) runs typecheck, lint, the game tests, and both b
 
 ```
 src/components/starfield/
-  Starward.tsx   React UI and game state: HUD, nav, briefings, market, log
+  Starward.tsx   React UI: HUD, nav, briefings, market, log
+  store.ts       Game state and its actions, in one zustand store
   engine.ts      Simulation: flight model, autopilot, orbits, laps, HUD projection
   renderer.ts    Draws each frame: WebGL2, or a 2D canvas fallback
   shaders/       GLSL for the background, stars, planets, ship, and trail
@@ -66,7 +67,7 @@ src/components/starfield/
   journey.ts     Places beyond the Sun
   tasks.ts       Flight-log challenge detection
   trade.ts       Prices and station income
-  saves.ts       Carries saves over from the old Slipstream name
+  saves.ts       The versioned save, and reading the older per-part keys
   gaze.ts        Webcam gaze steering
   audio.ts       Engine sound
   *.test.ts      Unit tests for the logic files, run with Node's test runner

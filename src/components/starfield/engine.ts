@@ -25,7 +25,7 @@ import { cameraEye } from "@/components/starfield/camera";
 import { FlightInput } from "@/components/starfield/input";
 import { StarfieldRenderer } from "@/components/starfield/renderer";
 import { formatRange, plotSystem } from "@/components/starfield/hud";
-import type { FrameMarker, PlotBlip, StarfieldHooks } from "@/components/starfield/types";
+import type { FrameMarker, PlotBlip, StarfieldHooks, StarfieldParams } from "@/components/starfield/types";
 
 export type { CameraView, FrameMarker, PlotBlip, StarfieldHooks, StarfieldParams } from "@/components/starfield/types";
 
@@ -315,7 +315,9 @@ export class StarfieldEngine {
     }
     const dt = Math.min(0.05, Math.max(0.001, (now - (this.prevNow || now)) / 1000));
     this.prevNow = now;
-    this.step(dt);
+    // Read once, so a hook that changes the params mid-frame takes effect from the next frame.
+    const params = this.hooks.current.getParams();
+    this.step(dt, params);
     this.renderer.draw({
       stars: this.data,
       live: this.live,
@@ -341,15 +343,14 @@ export class StarfieldEngine {
       aspect: this.aspect,
       yawLagRate: this.yawLagRate,
       pitchLagRate: this.pitchLagRate,
-      reduced: this.hooks.current.getParams().reducedMotion,
+      reduced: params.reducedMotion,
     });
     this.raf = requestAnimationFrame(this.frame);
   };
 
   private prevNow = 0;
 
-  private step(dt: number): void {
-    const params = this.hooks.current.getParams();
+  private step(dt: number, params: StarfieldParams): void {
     if (params.paused) {
       this.alert = "Paused";
       this.alertUntil = this.time + 10;
@@ -626,7 +627,7 @@ export class StarfieldEngine {
     }
     this.live = active;
     this.integrateStars(dt, dYaw, dPitch);
-    const rangeText = this.projectSystem(params.targetId);
+    const rangeText = this.projectSystem(params);
     this.rememberTrail();
     const taskId = this.chapter === "sun" ? stepTasks(this.taskMem, {
       dt,
@@ -838,7 +839,8 @@ export class StarfieldEngine {
     return Math.hypot(pos.x - this.shipX, pos.y - this.shipY, pos.z - this.shipZ);
   }
 
-  private projectSystem(targetId: string): string {
+  private projectSystem(params: StarfieldParams): string {
+    const targetId = params.targetId;
     const aspect = this.aspect || 1;
     const tan = this.tanFov || 0.7;
     const cs = Math.cos(-this.bank);
@@ -878,7 +880,7 @@ export class StarfieldEngine {
       const dist = Math.hypot(dx, dy, dz);
       if (body.id === targetId) {
         rangeText = formatRange(dist, this.chapter);
-        const flying = this.hooks.current.getParams().autopilot;
+        const flying = params.autopilot;
         const seconds = this.speed > 0.8 ? dist / this.speed : 0;
         if (flying && rangeText !== "Here" && seconds > 2 && seconds < 3600) {
           rangeText += seconds < 90 ? ` · ${Math.ceil(seconds)}s` : ` · ${Math.ceil(seconds / 60)}m`;
@@ -960,7 +962,7 @@ export class StarfieldEngine {
       const held = bodyById(this.nearId);
       if (held.id !== targetId || this.rangeTo(held.id) > surveyRadius(held) * 1.35) this.nearId = "";
     }
-    this.plot = plotSystem(contacts, this.shipX, this.shipZ, this.yaw, this.hooks.current.getParams().depots);
+    this.plot = plotSystem(contacts, this.shipX, this.shipZ, this.yaw, params.depots);
     rows.sort((a, b) => b.camZ - a.camZ);
     let count = 0;
     const push = (
