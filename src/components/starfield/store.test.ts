@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { SAVE_KEY, freshSave, type SaveStorage } from "./saves.ts";
 import { AWAY_MS, FIRST_FLIGHT, createGameStore, keepSaved, paramsOf, saveOf } from "./store.ts";
 import { navIn } from "./system.ts";
-import { HOLD_MAX, STATION_COST, STATION_LIMIT, priceOf } from "./trade.ts";
+import { HOLD_MAX, STATION_LIMIT, priceOf, stationCost } from "./trade.ts";
 
 const NOW = 1_800_000_000_000;
 
@@ -23,7 +23,7 @@ describe("load", () => {
   it("pays stations for the time away and says so after a minute", () => {
     const store = createGameStore(NOW);
     const save = freshSave(NOW - 10 * 60_000);
-    save.trade.depots = [{ id: "d", x: 0, z: 0 }];
+    save.trade.depots = [{ id: "d", chapter: "sun", x: 0, z: 0 }];
     store.getState().load(save, NOW);
     const { credits, paid, toasts } = store.getState();
     assert.ok(credits > save.trade.credits);
@@ -35,7 +35,7 @@ describe("load", () => {
   it("stays quiet about a short absence", () => {
     const store = createGameStore(NOW);
     const save = freshSave(NOW - AWAY_MS / 2);
-    save.trade.depots = [{ id: "d", x: 0, z: 0 }];
+    save.trade.depots = [{ id: "d", chapter: "sun", x: 0, z: 0 }];
     store.getState().load(save, NOW);
     assert.equal(store.getState().toasts.length, 0);
   });
@@ -184,27 +184,58 @@ describe("trade", () => {
 
   it("deploys stations in open space, logs the haul and the lane, and stops at the limit", () => {
     const store = createGameStore(NOW);
-    store.setState({ credits: STATION_COST * (STATION_LIMIT + 1), moreOpen: true });
+    const cost = stationCost("sun");
+    store.setState({ credits: cost * (STATION_LIMIT + 1), moreOpen: true });
     for (let i = 0; i < STATION_LIMIT + 1; i++) store.getState().deployStation({ x: i, z: 0 }, NOW + i);
     const { depots, log, moreOpen, credits } = store.getState();
     assert.equal(depots.length, STATION_LIMIT);
-    assert.equal(credits, STATION_COST);
+    assert.equal(credits, cost);
     assert.deepEqual(log.map((entry) => entry.id), ["haul", "lane"]);
     assert.equal(moreOpen, false);
   });
 
-  it("will not deploy near a world or outside the solar system", () => {
+  it("will not deploy near a world", () => {
     const store = createGameStore(NOW);
-    store.setState({ credits: STATION_COST * 3, nearId: "earth" });
-    store.getState().deployStation({ x: 0, z: 0 }, NOW);
-    store.setState({ nearId: "", chapterId: "stars" });
+    store.setState({ credits: stationCost("sun") * 3, nearId: "earth" });
     store.getState().deployStation({ x: 0, z: 0 }, NOW);
     assert.equal(store.getState().depots.length, 0);
   });
 
+  it("deploys beyond the Sun at that chapter's price, and keeps each chapter's stations on its own map", () => {
+    const store = createGameStore(NOW);
+    store.setState({ credits: stationCost("sun") + stationCost("web"), chapterId: "web" });
+    store.getState().deployStation({ x: 5, z: 5 }, NOW);
+    assert.equal(store.getState().credits, stationCost("sun"));
+    store.setState({ chapterId: "sun" });
+    store.getState().deployStation({ x: 1, z: 1 }, NOW + 1);
+    assert.deepEqual(store.getState().depots.map((depot) => depot.chapter), ["web", "sun"]);
+    assert.deepEqual(paramsOf(store.getState()).depots.map((depot) => depot.x), [1]);
+    store.setState({ chapterId: "web" });
+    assert.deepEqual(paramsOf(store.getState()).depots.map((depot) => depot.x), [5]);
+  });
+
+  it("limits stations per chapter, not in total", () => {
+    const store = createGameStore(NOW);
+    const full = Array.from({ length: STATION_LIMIT }, (_, i) => ({ id: `s${i}`, chapter: "sun", x: i, z: 0 }));
+    store.setState({ depots: full, credits: 1e6, chapterId: "stars" });
+    store.getState().deployStation({ x: 0, z: 0 }, NOW);
+    assert.equal(store.getState().depots.length, STATION_LIMIT + 1);
+    store.setState({ chapterId: "sun" });
+    store.getState().deployStation({ x: 0, z: 0 }, NOW);
+    assert.equal(store.getState().depots.length, STATION_LIMIT + 1);
+  });
+
+  it("adds up short payouts instead of rounding each one away", () => {
+    const store = createGameStore(NOW);
+    store.setState({ depots: [{ id: "d", chapter: "sun", x: 0, z: 0 }], paid: NOW, credits: 0 });
+    for (let tick = 1; tick <= 12; tick++) store.getState().payStations(NOW + tick * 5000);
+    // 60 seconds at 0.12 a second is 7.2 credits.
+    assert.equal(store.getState().credits, 7);
+  });
+
   it("pays stations as time passes", () => {
     const store = createGameStore(NOW);
-    store.setState({ depots: [{ id: "d", x: 0, z: 0 }], paid: NOW, credits: 0 });
+    store.setState({ depots: [{ id: "d", chapter: "sun", x: 0, z: 0 }], paid: NOW, credits: 0 });
     store.getState().payStations(NOW + 100_000);
     assert.ok(store.getState().credits > 0);
     assert.equal(store.getState().paid, NOW + 100_000);

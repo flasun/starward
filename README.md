@@ -7,7 +7,7 @@ Fly a real solar system, then the near stars, the Milky Way, and the galaxy clus
 - **Five chapters:** Round the Sun, The Near Stars, The Milky Way, Out of the Galaxy, and The Web. Chart every place in a chapter to open the next one.
 - **Real places.** Sizes and orbital periods are real. Distances are compressed so a flight can cross them.
 - **Flight log.** Twenty challenges, a set for every chapter: an eclipse and a ring cut round the Sun, a corona skim in the near stars, a dive to the galactic core, a postcard of home from beyond Andromeda, a brush past the Great Attractor, and a run to the edge of the map. Each is logged with your time.
-- **Trade and stations.** Buy goods where they are cheap, sell where they are dear, and deploy stations that pay while you fly.
+- **Trade and stations.** Every place you can chart has a market: buy goods where they are cheap and sell where they are dear. Every chapter's open space takes stations that pay while you fly. Prices, station costs, and station pay rise chapter by chapter.
 - **Cameras and steering.** Cockpit, chase, either wing, and overhead views. Three orbit heights, autopilot, and optional webcam gaze steering that runs on the device (MediaPipe).
 - **No account.** Progress saves in the browser, in one versioned `starward-save` entry.
 

@@ -8,7 +8,19 @@ import { clamp01 } from "./math.ts";
 import { type LogEntry, type Save, type SaveStorage, SAVE_VERSION, freshSave, writeSave } from "./saves.ts";
 import { bodyById, nextInNav } from "./system.ts";
 import { TASKS } from "./tasks.ts";
-import { HOLD_MAX, STATION_COST, STATION_LIMIT, type Depot, type GoodId, type Hold, holdUnits, priceOf, stationPay } from "./trade.ts";
+import {
+  HOLD_MAX,
+  STATION_LIMIT,
+  type Depot,
+  type GoodId,
+  type Hold,
+  holdUnits,
+  payRate,
+  priceOf,
+  stationCost,
+  stationPay,
+  stationsIn,
+} from "./trade.ts";
 import type { CameraView, StarfieldParams } from "./types.ts";
 
 /** One message at a time. Rewards hold a little longer than notes. */
@@ -184,7 +196,8 @@ export function paramsOf(state: GameState): StarfieldParams {
     view: state.view,
     aboveSide: state.aboveSide,
     paused: state.paused,
-    depots: state.depots,
+    // Only this chapter's stations: the others sit on other maps.
+    depots: stationsIn(state.depots, state.chapterId),
   };
 }
 
@@ -231,7 +244,7 @@ export function createGameStore(now = Date.now()): GameStore {
     toasts: [],
 
     load(save, at) {
-      const income = stationPay(save.trade.depots.length, save.trade.paid, at);
+      const income = stationPay(payRate(save.trade.depots), save.trade.paid, at);
       set({
         ...stateOf(save),
         credits: Math.max(0, Math.floor(save.trade.credits + income.gain)),
@@ -361,12 +374,14 @@ export function createGameStore(now = Date.now()): GameStore {
     },
     deployStation(at, now) {
       const { nearId, chapterId, credits, depots, logTask, notify } = get();
-      if (nearId || chapterId !== "sun" || credits < STATION_COST || depots.length >= STATION_LIMIT) return;
+      const cost = stationCost(chapterId);
+      if (nearId || credits < cost || stationsIn(depots, chapterId).length >= STATION_LIMIT) return;
       const count = depots.length + 1;
-      set({ credits: credits - STATION_COST, depots: [...depots, { id: `depot-${now}`, x: at.x, z: at.z }], moreOpen: false });
+      const depot = { id: `depot-${now}`, chapter: chapterId, x: at.x, z: at.z };
+      set({ credits: credits - cost, depots: [...depots, depot], moreOpen: false });
       logTask("haul", 0);
       if (count >= 3) logTask("lane", 0);
-      if (count >= 3) notify("Three stations are paying you");
+      if (count === 3) notify("Three stations are paying you");
       else notify("Station deployed", "It earns while you fly.");
     },
     payStations(now) {
@@ -375,7 +390,7 @@ export function createGameStore(now = Date.now()): GameStore {
         set({ paid: now });
         return;
       }
-      const income = stationPay(depots.length, paid, now);
+      const income = stationPay(payRate(depots), paid, now);
       set((state) => ({ paid: income.at, credits: state.credits + income.gain }));
     },
 
