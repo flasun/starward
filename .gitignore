@@ -12,3 +12,6 @@ node_modules/
 # QA screenshots stay local.
 screenshots/*
 !screenshots/.gitkeep
+
+# Written by the local preview server
+.grok/preview.pid
