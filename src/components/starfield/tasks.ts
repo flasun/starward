@@ -193,6 +193,7 @@ export function stepTasks(memory: TaskMemory, ctx: TaskContext): TaskId | null {
   }
 
   if (!memory.done.shadow) {
+    const forward = cameraForward(ctx.yaw, ctx.pitch);
     for (const body of BODIES) {
       if (!body.goal || body.parent || body.au <= 0 || body.quiet) continue;
       const pos = bodyPosition(body, ctx.time);
@@ -200,7 +201,12 @@ export function stepTasks(memory: TaskMemory, ctx: TaskContext): TaskId | null {
       const vis = visualRadius(body);
       const pr = hypot(pos.x, pos.y, pos.z) || 1;
       const align = (ship.x * pos.x + ship.y * pos.y + ship.z * pos.z) / (shipR * pr);
-      if (dist < surveyRadius(body) && dist > vis * 1.4 && shipR > pr + vis && align > 0.94) mark("shadow");
+      // Heading in, not leaving: flying out past the night side doesn't count.
+      const inbound =
+        (forward.x * (pos.x - ship.x) + forward.y * (pos.y - ship.y) + forward.z * (pos.z - ship.z)) / (dist || 1);
+      if (dist < surveyRadius(body) && dist > vis * 1.4 && shipR > pr + vis && align > 0.94 && inbound > 0.5) {
+        mark("shadow");
+      }
     }
   }
 

@@ -1251,10 +1251,12 @@ export class StarfieldEngine {
     const tx = -oz;
     const tz = ox;
     // About 2.5 times Earth's survey range, so the first approach takes a few
-    // seconds instead of finishing before the player has looked around.
-    this.shipX = earth.x + ox * 195 + tx * 240;
+    // seconds instead of finishing before the player has looked around. On the
+    // sunward side: Earth's day face is in view, and Shadow pass (arriving from
+    // beyond a planet) takes a deliberate loop instead of a straight drift.
+    this.shipX = earth.x - ox * 195 + tx * 240;
     this.shipY = 4;
-    this.shipZ = earth.z + oz * 195 + tz * 240;
+    this.shipZ = earth.z - oz * 195 + tz * 240;
     const dx = earth.x - this.shipX;
     const dz = earth.z - this.shipZ;
     const fl = Math.hypot(dx, dz) || 1;
