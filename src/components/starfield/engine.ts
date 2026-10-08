@@ -629,7 +629,7 @@ export class StarfieldEngine {
     this.integrateStars(dt, dYaw, dPitch);
     const rangeText = this.projectSystem(params);
     this.rememberTrail();
-    const taskId = this.chapter === "sun" ? stepTasks(this.taskMem, {
+    const taskId = stepTasks(this.taskMem, {
       dt,
       speed: this.speed,
       autopilot: params.autopilot,
@@ -646,7 +646,10 @@ export class StarfieldEngine {
       shipY: this.shipY,
       shipZ: this.shipZ,
       time: this.time,
-    }) : null;
+      chapter: this.chapter,
+      focus: params.focus,
+      orbiting: orbitOn,
+    });
     if (taskId) this.hooks.current.onTask(taskId, this.time);
 
     this.frames += 1;

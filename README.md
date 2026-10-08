@@ -6,7 +6,7 @@ Fly a real solar system, then the near stars, the Milky Way, and the galaxy clus
 
 - **Five chapters:** Round the Sun, The Near Stars, The Milky Way, Out of the Galaxy, and The Web. Chart every place in a chapter to open the next one.
 - **Real places.** Sizes and orbital periods are real. Distances are compressed so a flight can cross them.
-- **Flight log.** Eight challenges (soft arrival, slingshot, ring cut, eclipse, and more) are logged with your time.
+- **Flight log.** Twenty challenges, a set for every chapter: an eclipse and a ring cut round the Sun, a corona skim in the near stars, a dive to the galactic core, a postcard of home from beyond Andromeda, a brush past the Great Attractor, and a run to the edge of the map. Each is logged with your time.
 - **Trade and stations.** Buy goods where they are cheap, sell where they are dear, and deploy stations that pay while you fly.
 - **Cameras and steering.** Cockpit, chase, either wing, and overhead views. Three orbit heights, autopilot, and optional webcam gaze steering that runs on the device (MediaPipe).
 - **No account.** Progress saves in the browser, in one versioned `starward-save` entry.
@@ -68,7 +68,7 @@ src/components/starfield/
   gl.ts, ship-mesh.ts, math.ts   Shader linking, the ship model, shared math
   system.ts      Solar-system bodies, chapters, orbit math
   journey.ts     Places beyond the Sun
-  tasks.ts       Flight-log challenge detection
+  tasks.ts       Flight-log challenges for every chapter, and their detection
   trade.ts       Prices and station income
   saves.ts       The versioned save, and reading the older per-part keys
   gaze.ts        Webcam gaze steering

@@ -19,7 +19,7 @@ const LESSONS = [
   },
   {
     title: "Fly a task",
-    body: "Open Log. Soft arrivals, slingshots, the ring cut, and the rest are saved with your time. A faint trail marks where you have flown.",
+    body: "Open Log. Every chapter has its own challenges, from a soft arrival to the edge of the map, and each is saved with your time. A faint trail marks where you have flown.",
   },
 ];
 
