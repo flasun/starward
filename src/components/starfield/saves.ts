@@ -7,7 +7,7 @@
 import { clamp01 } from "./math.ts";
 import { CHAPTERS, chapterOpen, isChartable } from "./system.ts";
 import { TASKS } from "./tasks.ts";
-import { GOODS, START_CREDITS, STATION_LIMIT, type Depot, type Hold, emptyHold } from "./trade.ts";
+import { GOODS, START_CREDITS, STATION_LIMIT, type Depot, type Hold, emptyHold, stationsIn } from "./trade.ts";
 import type { CameraView } from "./types.ts";
 
 export const SAVE_KEY = "starward-save";
@@ -191,10 +191,13 @@ function readTrade(value: unknown, now: number): Save["trade"] {
     }
   }
   if (Array.isArray(value.depots)) {
-    trade.depots = value.depots
-      .filter((item): item is Depot => isRecord(item) && typeof item.id === "string" && isNumber(item.x) && isNumber(item.z))
-      .map((item) => ({ id: item.id, x: item.x, z: item.z }))
-      .slice(0, STATION_LIMIT);
+    for (const item of value.depots) {
+      if (!isRecord(item) || typeof item.id !== "string" || !isNumber(item.x) || !isNumber(item.z)) continue;
+      // Stations from before every chapter had them are all round the Sun.
+      const chapter = CHAPTERS.some((entry) => entry.id === item.chapter) ? (item.chapter as string) : "sun";
+      if (stationsIn(trade.depots, chapter).length >= STATION_LIMIT) continue;
+      trade.depots.push({ id: item.id, chapter, x: item.x, z: item.z });
+    }
   }
   if (isNumber(value.paid)) trade.paid = value.paid;
   return trade;

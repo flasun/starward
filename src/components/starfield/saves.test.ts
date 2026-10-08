@@ -37,7 +37,7 @@ describe("loadSave", () => {
     save.charted = ["earth", "moon"];
     save.log = [{ id: "soft", seconds: 42 }];
     save.helpSeen = true;
-    save.trade = { credits: 900, hold: { minerals: 2, water: 0, tech: 1 }, depots: [{ id: "depot-1", x: 10, z: -4 }], paid: NOW - 5000 };
+    save.trade = { credits: 900, hold: { minerals: 2, water: 0, tech: 1 }, depots: [{ id: "depot-1", chapter: "stars", x: 10, z: -4 }], paid: NOW - 5000 };
     writeSave(storage, save);
     assert.equal(JSON.parse(storage.map.get(SAVE_KEY)!).version, SAVE_VERSION);
     assert.deepEqual(loadSave(storage, NOW), save);
@@ -61,7 +61,7 @@ describe("loadSave", () => {
     assert.deepEqual(save.trade, {
       credits: 1234,
       hold: { minerals: 0, water: 3, tech: 0 },
-      depots: [{ id: "depot-9", x: 1, z: 2 }],
+      depots: [{ id: "depot-9", chapter: "sun", x: 1, z: 2 }],
       paid: NOW - 1000,
     });
   });
@@ -145,6 +145,26 @@ describe("parseSave", () => {
     assert.equal(save.trade.depots.length, STATION_LIMIT);
     assert.equal(save.trade.depots[0]!.id, "a");
     assert.equal(save.trade.paid, NOW);
+  });
+
+  it("puts stations from before every chapter had them round the Sun, and caps each chapter", () => {
+    const depot = (id: string, chapter?: unknown) => ({ id, chapter, x: 1, z: 1 });
+    const save = parseSave(
+      {
+        version: 1,
+        trade: {
+          depots: [
+            depot("old"),
+            depot("odd", "atlantis"),
+            ...Array.from({ length: 8 }, (_, i) => depot(`star-${i}`, "stars")),
+          ],
+        },
+      },
+      NOW,
+    )!;
+    const where = save.trade.depots.map((item) => `${item.id}@${item.chapter}`);
+    assert.deepEqual(where.slice(0, 2), ["old@sun", "odd@sun"]);
+    assert.equal(where.filter((item) => item.endsWith("@stars")).length, STATION_LIMIT);
   });
 
   it("fills in what a save leaves out", () => {

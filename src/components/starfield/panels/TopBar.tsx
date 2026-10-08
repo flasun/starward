@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useActions, useGame, useKit, usePainter } from "@/components/starfield/kit";
 import { CHAPTERS, chapterById, chapterDone, chapterOpen, goalsIn } from "@/components/starfield/system";
-import { HOLD_MAX, holdUnits } from "@/components/starfield/trade";
+import { HOLD_MAX, holdUnits, stationsIn } from "@/components/starfield/trade";
 
 /** The wordmark, the chapter and its progress, Help and Log, and the flight readout. */
 export function TopBar() {
@@ -21,7 +21,7 @@ function ChapterLine() {
   const { store } = useKit();
   const chapterId = useGame((game) => game.chapterId);
   const charted = useGame((game) => game.charted);
-  const stations = useGame((game) => game.depots.length);
+  const stations = useGame((game) => stationsIn(game.depots, game.chapterId).length);
   const mapOpen = useGame((game) => game.mapOpen);
   const chapter = chapterById(chapterId);
   const goals = goalsIn(chapterId);
@@ -50,12 +50,8 @@ function ChapterLine() {
               {done} of {goals.length}
             </span>{" "}
             places charted
-            {chapterId === "sun" ? (
-              <>
-                {" · "}
-                <span className="chart">{stations}</span> {stations === 1 ? "station" : "stations"}
-              </>
-            ) : null}
+            {" · "}
+            <span className="chart">{stations}</span> {stations === 1 ? "station" : "stations"}
           </>
         )}
       </p>

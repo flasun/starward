@@ -4,7 +4,7 @@ import { Volume2, VolumeX } from "lucide-react";
 import { useActions, useGame, useKit, usePainter } from "@/components/starfield/kit";
 import { OrbitLevels } from "@/components/starfield/panels/OrbitLevels";
 import { type BodyDef, bodyById, goalsIn, navIn, nextInNav } from "@/components/starfield/system";
-import { STATION_COST, STATION_LIMIT } from "@/components/starfield/trade";
+import { STATION_LIMIT, stationCost, stationsIn } from "@/components/starfield/trade";
 import type { CameraView } from "@/components/starfield/types";
 
 const VIEWS: Record<CameraView, { label: string; tip: string }> = {
@@ -184,9 +184,12 @@ function MorePanel() {
   const { store, engine, stage, shipAt } = useKit();
   const { toggleBoost, deployStation, toggleMuted, setDensity, notify } = useActions();
   const boost = useGame((game) => game.boost);
+  const cost = useGame((game) => stationCost(game.chapterId));
   const canDeploy = useGame(
     (game) =>
-      game.chapterId === "sun" && !game.nearId && game.credits >= STATION_COST && game.depots.length < STATION_LIMIT,
+      !game.nearId &&
+      game.credits >= stationCost(game.chapterId) &&
+      stationsIn(game.depots, game.chapterId).length < STATION_LIMIT,
   );
   const targetId = useGame((game) => game.targetId);
   const noseLevel = useGame((game) => game.noseLevel);
@@ -235,7 +238,7 @@ function MorePanel() {
           disabled={!canDeploy}
           onClick={() => deployStation(shipAt.current, Date.now())}
         >
-          Deploy · {STATION_COST}
+          Deploy · {cost}
         </button>
         <OrbitLevels id={targetId} />
         <button
