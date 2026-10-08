@@ -1,6 +1,6 @@
 /** Real solar-system bodies on a compressed map so a flight can cross them. */
 
-import { JOURNEY } from "@/components/starfield/journey";
+import { JOURNEY } from "./journey.ts";
 
 export type BodyDef = {
   id: string;
