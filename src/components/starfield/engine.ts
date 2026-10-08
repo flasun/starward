@@ -84,6 +84,8 @@ export type StarfieldHooks = {
     targetId: string;
     nearId: string;
     chartId: string;
+    /** The player has touched a control. Nothing is charted or logged before this. */
+    engaged: boolean;
     alert: string;
     markers: FrameMarker[];
     plot: PlotBlip[];
@@ -913,6 +915,7 @@ export class StarfieldEngine {
   private eyeY = 0;
   private eyeZ = 0;
   private taskMem: TaskMemory = createTaskState();
+  private engaged = false;
   private readonly trail: { x: number; y: number; z: number }[] = [];
   private trailProg: WebGLProgram | null = null;
   private trailVao: WebGLVertexArrayObject | null = null;
@@ -950,6 +953,11 @@ export class StarfieldEngine {
     this.bindInput();
     window.__controlsTest = this.probe;
     this.raf = requestAnimationFrame(this.frame);
+  }
+
+  /** Reward bell. Silent while muted or before the first gesture. */
+  chime(kind: "chart" | "task"): void {
+    this.audio.chime(kind, this.hooks.current.getParams().muted);
   }
 
   level(): void {
@@ -1242,9 +1250,11 @@ export class StarfieldEngine {
     const oz = earth.z / len;
     const tx = -oz;
     const tz = ox;
-    this.shipX = earth.x + ox * 78 + tx * 96;
+    // About 2.5 times Earth's survey range, so the first approach takes a few
+    // seconds instead of finishing before the player has looked around.
+    this.shipX = earth.x + ox * 195 + tx * 240;
     this.shipY = 4;
-    this.shipZ = earth.z + oz * 78 + tz * 96;
+    this.shipZ = earth.z + oz * 195 + tz * 240;
     const dx = earth.x - this.shipX;
     const dz = earth.z - this.shipZ;
     const fl = Math.hypot(dx, dz) || 1;
@@ -1302,6 +1312,7 @@ export class StarfieldEngine {
 
   private onPointerDown = (e: PointerEvent): void => {
     this.audio.unlock();
+    this.engaged = true;
     this.downX = e.clientX;
     this.downY = e.clientY;
     this.downMoved = false;
@@ -1356,6 +1367,7 @@ export class StarfieldEngine {
 
   private onKeyDown = (e: KeyboardEvent): void => {
     this.audio.unlock();
+    this.engaged = true;
     const hud = this.isHud(e.target);
     if (!hud && (e.code === "Space" || e.code.startsWith("Arrow"))) e.preventDefault();
     if (e.code === "Space" && !e.repeat && !hud) this.hooks.current.onToggleBoost();
@@ -1374,6 +1386,7 @@ export class StarfieldEngine {
   private onWheel = (e: WheelEvent): void => {
     if (this.isHud(e.target)) return;
     e.preventDefault();
+    this.engaged = true;
     const params = this.hooks.current.getParams();
     const step = clamp(e.deltaY / 1400, -0.06, 0.06);
     this.hooks.current.onSpeed(clamp(params.speed - step, 0, 1));
@@ -1742,6 +1755,7 @@ export class StarfieldEngine {
       dt,
       speed: this.speed,
       autopilot: params.autopilot,
+      earned: this.engaged && !params.autopilot,
       view: params.view,
       yaw: this.yaw,
       pitch: this.pitch,
@@ -1792,6 +1806,7 @@ export class StarfieldEngine {
         targetId: params.targetId,
         nearId: this.nearId,
         chartId: this.chartId,
+        engaged: this.engaged,
         alert: this.alert,
         markers: this.markers,
         plot: this.plot,

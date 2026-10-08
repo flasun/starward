@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as Slider from "@radix-ui/react-slider";
 import { Volume2, VolumeX } from "lucide-react";
 import { StarfieldEngine, type CameraView, type FrameMarker, type PlotBlip, type StarfieldHooks, type StarfieldParams } from "@/components/starfield/engine";
@@ -60,6 +60,13 @@ const LESSONS = [
 ];
 
 const FIRST_FLIGHT = ["earth", "moon", "mars"];
+
+/** One message at a time. Rewards hold a little longer than notes. */
+type Toast = { id: number; title: string; detail?: string; reward: boolean };
+const TOAST_MS = 2600;
+const REWARD_MS = 3400;
+/** Away this long before station earnings get a welcome-back note. */
+const AWAY_MS = 60_000;
 
 type BodyNav = BodyDef[];
 
@@ -156,7 +163,9 @@ export function Starward() {
   const [lesson, setLesson] = useState<number | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [log, setLog] = useState<{ id: string; seconds: number }[]>([]);
-  const [banner, setBanner] = useState("");
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastSeq = useRef(0);
+  const [offerOpen, setOfferOpen] = useState(true);
   const [credits, setCredits] = useState(START_CREDITS);
   const [hold, setHold] = useState<Hold>(emptyHold);
   const [depots, setDepots] = useState<Depot[]>([]);
@@ -169,6 +178,12 @@ export function Starward() {
   const [coach, setCoach] = useState("");
   const tourRef = useRef<string[] | null>(null);
   const linkedTarget = useRef<string | null>(null);
+
+  const notify = useCallback((title: string, detail?: string, reward = false) => {
+    toastSeq.current += 1;
+    const id = toastSeq.current;
+    setToasts((queue) => [...queue, { id, title, detail, reward }]);
+  }, []);
 
   paramsRef.current = {
     speed,
@@ -235,9 +250,11 @@ export function Starward() {
   };
   hooksRef.current.onError = (message) => setError(message);
   hooksRef.current.onTask = (id, seconds) => {
+    if (log.some((entry) => entry.id === id)) return;
     setLog((prev) => (prev.some((entry) => entry.id === id) ? prev : [...prev, { id, seconds }]));
     const name = TASKS.find((task) => task.id === id)?.name ?? "Task";
-    setBanner(`${name} logged`);
+    notify(name, `Flight log · ${log.length + 1} of ${TASKS.length}`, true);
+    engineRef.current?.chime("task");
   };
   hooksRef.current.onFrame = (snap) => {
     const warp = warpRef.current;
@@ -278,10 +295,12 @@ export function Starward() {
       setNoseLevel(snap.leveling);
     }
     paintMarkers(snap.markers);
-    if (snap.chartId !== chartSeen.current) {
+    // Nothing counts until the player has touched a control.
+    if (snap.engaged && snap.chartId !== chartSeen.current) {
       chartSeen.current = snap.chartId;
       if (snap.chartId && bodyById(snap.chartId).goal) {
         const chartId = snap.chartId;
+        if (!charted.includes(chartId)) celebrateChart(chartId);
         setCharted((prev) => {
           if (prev.includes(chartId)) return prev;
           const tour = tourRef.current;
@@ -294,19 +313,14 @@ export function Starward() {
               setBoost(false);
               setAutopilot(true);
               setFocus(true);
-              setCoach(`${bodyById(chartId).name} charted. On to ${bodyById(next).name}.`);
+              setCoach(`Next: ${bodyById(next).name}.`);
             });
           } else if (index >= 0) {
             tourRef.current = null;
             queueMicrotask(() => {
               setAutopilot(false);
-              setCoach("Earth, the Moon, and Mars are charted. Pick the next world.");
+              setCoach("First flight done. Pick the next world.");
             });
-          }
-          try {
-            navigator.vibrate?.(16);
-          } catch {
-            /* no haptics */
           }
           return [...prev, chartId];
         });
@@ -433,12 +447,15 @@ export function Starward() {
       const income = stationPay(nextDepots.length, paid, Date.now());
       paidAt.current = income.at;
       setCredits(Math.max(0, Math.floor(purse + income.gain)));
+      if (income.gain > 0 && Date.now() - paid >= AWAY_MS) {
+        notify(`+${income.gain.toLocaleString()} Cr`, "Your stations earned this while you were away.", true);
+      }
       setHold(nextHold);
       setDepots(nextDepots.slice(0, STATION_LIMIT));
     } catch {
       /* ignore broken storage */
     }
-  }, []);
+  }, [notify]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -528,11 +545,12 @@ export function Starward() {
     return () => window.clearTimeout(timer);
   }, [coach]);
 
+  const toast = toasts[0];
   useEffect(() => {
-    if (!banner) return;
-    const timer = window.setTimeout(() => setBanner(""), 3400);
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToasts((queue) => queue.slice(1)), toast.reward ? REWARD_MS : TOAST_MS);
     return () => window.clearTimeout(timer);
-  }, [banner]);
+  }, [toast]);
 
   const closeLesson = () => {
     setLesson(null);
@@ -640,14 +658,14 @@ export function Starward() {
       .catch((err: unknown) => {
         if (dead) return;
         setGazeOn(false);
-        setBanner(err instanceof Error ? err.message : "Gaze could not start.");
+        notify(err instanceof Error ? err.message : "Gaze could not start.");
       });
     return () => {
       dead = true;
       stop();
       engineRef.current?.setGaze(0, 0, false);
     };
-  }, [gazeOn]);
+  }, [gazeOn, notify]);
 
   useEffect(() => {
     const hide = () => setHint(false);
@@ -719,6 +737,33 @@ export function Starward() {
     }
   }
 
+  /** The payoff for a new place: a card, a bell, a ring on its label, and a tap on phones. */
+  function celebrateChart(id: string) {
+    const goals = goalsIn(chapterId);
+    const done = goals.filter((body) => body.id === id || charted.includes(body.id)).length;
+    const here = chapterById(chapterId);
+    const detail =
+      done < goals.length
+        ? `${done} of ${goals.length} · ${here.name}`
+        : here.next
+          ? `All ${goals.length} charted. Onward is open.`
+          : `All ${goals.length} charted. The journey is complete.`;
+    notify(`${bodyById(id).name} charted`, detail, true);
+    engineRef.current?.chime("chart");
+    const el = markerRefs.current[id];
+    if (el) {
+      el.classList.remove("is-new");
+      void el.offsetWidth;
+      el.classList.add("is-new");
+      window.setTimeout(() => el.classList.remove("is-new"), 1400);
+    }
+    try {
+      navigator.vibrate?.(16);
+    } catch {
+      /* no haptics */
+    }
+  }
+
   function paintMarkers(markers: FrameMarker[]) {
     for (const body of bodiesIn(chapterId)) {
       const el = markerRefs.current[body.id];
@@ -747,6 +792,8 @@ export function Starward() {
   const target = bodyById(targetId);
   const nearBody = nearId ? bodyById(nearId) : null;
   const showBrief = Boolean(nearBody) && dismissed !== nearId;
+  // Stays up until the player takes it, waves it off, or charts a place.
+  const offer = offerOpen && charted.length === 0 && lesson === null && !autopilot;
   const nextAfter = (id: string) => {
     const index = nav.findIndex((body) => body.id === id);
     return nav[(index + 1 + nav.length) % nav.length];
@@ -813,10 +860,9 @@ export function Starward() {
     setDepots((value) => [...value, { id: `depot-${Date.now()}`, x: at.x, z: at.z }]);
     logTask("haul");
     if (depots.length + 1 >= 3) logTask("lane");
-    setBanner(
-      depots.length + 1 >= 3
-        ? "Three stations are paying you."
-        : "Station deployed. It earns while you fly.",
+    notify(
+      depots.length + 1 >= 3 ? "Three stations are paying you" : "Station deployed",
+      depots.length + 1 >= 3 ? undefined : "It earns while you fly.",
     );
     setMoreOpen(false);
   };
@@ -833,6 +879,7 @@ export function Starward() {
   };
   const startFirstFlight = () => {
     tourRef.current = [...FIRST_FLIGHT];
+    setOfferOpen(false);
     setHint(false);
     setLesson(null);
     setTargetId("earth");
@@ -848,14 +895,14 @@ export function Starward() {
     url.searchParams.set("target", targetId);
     const text = `${chapterCharted} of ${chapterGoals.length} charted in Starward.`;
     const full = `${text} ${url.toString()}`;
-    const done = () => setBanner("Link copied");
+    const done = () => notify("Link copied");
     if (navigator.share) {
       void navigator.share({ title: "Starward", text, url: url.toString() }).catch(() => {
-        void navigator.clipboard?.writeText(full).then(done).catch(() => setBanner(full));
+        void navigator.clipboard?.writeText(full).then(done).catch(() => notify(full));
       });
       return;
     }
-    void navigator.clipboard?.writeText(full).then(done).catch(() => setBanner(full));
+    void navigator.clipboard?.writeText(full).then(done).catch(() => notify(full));
   };
   const aboveName = aboveSide < 0 ? "Above L" : aboveSide > 0 ? "Above R" : "Above";
   const cycleView = () => {
@@ -916,7 +963,7 @@ export function Starward() {
               "Charted"
             ) : (
               <>
-                <span className="chart">
+                <span key={chapterCharted} className="chart is-count">
                   {chapterCharted} of {chapterGoals.length}
                 </span>{" "}
                 places charted
@@ -1113,25 +1160,33 @@ export function Starward() {
         </article>
       ) : null}
       <div className="chrome">
-        <p className={hint && lesson === null && !coach ? "hint" : "hint is-hidden"}>
-          {charted.length === 0 ? (
-            <>
-              <span>Earth is selected. Press Go.</span>
-              <button type="button" className="hint-go" onClick={startFirstFlight}>
-                First flight
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="md:hidden">Drag to look. Go flies you there.</span>
-              <span className="hidden md:inline">Drag to look. A click nudges the nose. Go flies to the place you pick.</span>
-            </>
-          )}
-        </p>
+        {offer ? (
+          <p className="hint">
+            <span>Earth is selected. Press Go.</span>
+            <button type="button" className="hint-go" onClick={startFirstFlight}>
+              First flight
+            </button>
+            <button type="button" className="hint-skip" onClick={() => setOfferOpen(false)}>
+              Not now
+            </button>
+          </p>
+        ) : (
+          <p className={hint && lesson === null && !coach ? "hint" : "hint is-hidden"}>
+            <span className="md:hidden">Drag to look. Go flies you there.</span>
+            <span className="hidden md:inline">Drag to look. A click nudges the nose. Go flies to the place you pick.</span>
+          </p>
+        )}
         {coach ? <p className="hint">{coach}</p> : null}
         {gazeNote ? <p className="status">{gazeNote}</p> : null}
         {alert ? <p className="status">{alert}</p> : null}
-        {banner ? <p className="status">{banner}</p> : null}
+        <div className="toasts" aria-live="polite">
+          {toast ? (
+            <p key={toast.id} className={toast.reward ? "toast is-reward" : "toast"}>
+              <strong>{toast.title}</strong>
+              {toast.detail ? <span>{toast.detail}</span> : null}
+            </p>
+          ) : null}
+        </div>
         {showBrief && nearBody ? (
           <article className="brief" data-hud>
             <div className="brief-top">
