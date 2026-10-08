@@ -38,10 +38,13 @@ Always start Vite through the npm scripts. They run it through `scripts/with-app
 | `npm run dev` | Dev server on port 8080 |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run build` | Production build into `.vercel/output` |
-| `npm run preview:restart` | Serve the production build on `127.0.0.1:8081` |
+| `npm run build` | Production build for Vercel, into `.vercel/output` |
+| `npm run preview:restart` | Serve the Vercel build on `127.0.0.1:8081` |
+| `npm run build:cloudflare` | Production build for Cloudflare Workers, into `.output` |
+| `npm run preview:cloudflare` | Build for Workers and serve it locally in workerd on port 8787 |
+| `npm run deploy:cloudflare` | Build for Workers and deploy with Wrangler |
 
-CI (`.github/workflows/ci.yml`) runs typecheck, lint, and build on every pull request.
+CI (`.github/workflows/ci.yml`) runs typecheck, lint, and both builds on every pull request.
 
 ## Code map
 
@@ -61,7 +64,18 @@ src/routes/      TanStack Start routes
 
 ## Stack and deploy
 
-React 19, TanStack Start, Tailwind v4, and raw WebGL2 (no engine). Nitro builds for Vercel (`preset: "vercel"` in `vite.config.ts`).
+React 19, TanStack Start, Tailwind v4, and raw WebGL2 (no engine). Nitro builds the server for one of two targets. `vite.config.ts` picks the target from the Vite mode:
+
+- **Vercel** (default). `npm run build`, and every build Grok runs.
+- **Cloudflare Workers** at `starward.vorion.org`. `npm run build:cloudflare` builds with `--mode cloudflare`. Nitro merges `wrangler.jsonc` into the generated `.output/server/wrangler.json`, and `wrangler deploy` from the repo root uses that generated file.
+
+### First Cloudflare deploy
+
+1. Make sure vorion.org is a zone in the Cloudflare account you deploy to. A Workers custom domain only works on a zone in the same account, and the hostname can't already have a CNAME record.
+2. Deploy, either way:
+   - **From GitHub (Workers Builds).** In the dashboard, go to Workers & Pages, create a Worker named `starward`, and connect this repository. Set the build command to `npm run build:cloudflare` and leave the deploy command as `npx wrangler deploy`. Every push to `main` then deploys. The Worker name has to match `name` in `wrangler.jsonc`.
+   - **From your machine.** Run `npx wrangler login`, then `npm run deploy:cloudflare`.
+3. On the first deploy, Wrangler attaches `starward.vorion.org` and Cloudflare creates the DNS record and certificate.
 
 ## Built with Grok
 
