@@ -6,7 +6,7 @@ import {
   surveyRadius,
   visualRadius,
   worldToCamera,
-} from "@/components/starfield/system";
+} from "./system.ts";
 
 export const TASKS = [
   {

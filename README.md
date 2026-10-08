@@ -38,13 +38,15 @@ Always start Vite through the npm scripts. They run it through `scripts/with-app
 | `npm run dev` | Dev server on port 8080 |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
+| `npm run test:game` | Unit tests for the game logic (`src/components/**/*.test.ts`) |
+| `npm run check:render` | Load the served build in headless Chromium and fail if it doesn't render or chart Earth |
 | `npm run build` | Production build for Vercel, into `.vercel/output` |
 | `npm run preview:restart` | Serve the Vercel build on `127.0.0.1:8081` |
 | `npm run build:cloudflare` | Production build for Cloudflare Workers, into `.output` |
 | `npm run preview:cloudflare` | Build for Workers and serve it locally in workerd on port 8787 |
 | `npm run deploy:cloudflare` | Build for Workers and deploy with Wrangler |
 
-CI (`.github/workflows/ci.yml`) runs typecheck, lint, and both builds on every pull request.
+CI (`.github/workflows/ci.yml`) runs typecheck, lint, the game tests, and both builds on every pull request. A second job serves the build and runs `check:render`, because a broken shader passes typecheck and build.
 
 ## Code map
 
@@ -59,6 +61,7 @@ src/components/starfield/
   saves.ts       Carries saves over from the old Slipstream name
   gaze.ts        Webcam gaze steering
   audio.ts       Engine sound
+  *.test.ts      Unit tests for the logic files, run with Node's test runner
 src/routes/      TanStack Start routes
 ```
 
