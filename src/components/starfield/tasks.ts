@@ -1,5 +1,6 @@
 import {
   BODIES,
+  bodyById,
   bodyPosition,
   cameraForward,
   surveyRadius,
@@ -36,7 +37,7 @@ export const TASKS = [
   {
     id: "eclipse",
     name: "Eclipse",
-    how: "Line a moon up so it crosses the Sun.",
+    how: "Face the Sun from near a moon, and hold the moon across its disc.",
   },
   {
     id: "haul",
@@ -53,6 +54,7 @@ export const TASKS = [
 export type TaskId = (typeof TASKS)[number]["id"];
 
 const GIANTS = ["jupiter", "saturn", "uranus", "neptune"];
+const SUN_RADIUS = visualRadius(bodyById("sun"));
 const SOFT_SPEED = 22;
 
 export type SlingPass = {
@@ -215,9 +217,13 @@ export function stepTasks(memory: TaskMemory, ctx: TaskContext): TaskId | null {
     const toSunY = -ship.y;
     const toSunZ = -ship.z;
     const sunD = shipR;
+    const forward = cameraForward(ctx.yaw, ctx.pitch);
+    // Looking at the Sun, not lined up with it somewhere behind the ship.
+    const facing = (forward.x * toSunX + forward.y * toSunY + forward.z * toSunZ) / sunD;
+    const sunAngle = Math.atan(SUN_RADIUS / sunD);
     let aligned = false;
     for (const body of BODIES) {
-      if (!body.parent) continue;
+      if (facing < 0.85 || !body.parent) continue;
       const pos = bodyPosition(body, ctx.time);
       const mx = pos.x - ship.x;
       const my = pos.y - ship.y;
@@ -225,7 +231,9 @@ export function stepTasks(memory: TaskMemory, ctx: TaskContext): TaskId | null {
       const md = hypot(mx, my, mz);
       if (md < 6 || md > sunD) continue;
       const cos = (mx * toSunX + my * toSunY + mz * toSunZ) / (md * sunD);
-      if (cos > 0.997) aligned = true;
+      const apart = Math.acos(Math.min(1, cos));
+      // Over the Sun's disc as seen from here, and near enough to show as a disc itself.
+      if (apart < sunAngle && Math.atan(visualRadius(body) / md) > sunAngle * 0.25) aligned = true;
     }
     memory.eclipse = aligned ? memory.eclipse + ctx.dt : 0;
     if (memory.eclipse > 0.45) mark("eclipse");
