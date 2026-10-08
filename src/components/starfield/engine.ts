@@ -708,8 +708,6 @@ function plotSystem(
   return marks;
 }
 
-const CAPTURE_IDS = new Set(["earth", "jupiter", "saturn"]);
-
 function captureWell(body: BodyDef) {
   const R = visualRadius(body);
   return {
@@ -2163,8 +2161,8 @@ export class StarfieldEngine {
       const x1 = row.ndcX * cs - row.ndcY * sn;
       const y1 = row.ndcX * sn + row.ndcY * cs;
       const behind = row.camZ < 0.5;
-      let x = behind ? 0.5 + Math.sign(row.camX || 1) * 0.4 : x1 * 0.5 + 0.5;
-      let y = behind ? 0.46 : 1 - (y1 * 0.5 + 0.5);
+      const x = behind ? 0.5 + Math.sign(row.camX || 1) * 0.4 : x1 * 0.5 + 0.5;
+      const y = behind ? 0.46 : 1 - (y1 * 0.5 + 0.5);
       const primary = row.body.id === targetId;
       if (!primary && (behind || x < 0 || x > 1 || y < 0.02 || y > 0.92)) continue;
       const halo =

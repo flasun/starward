@@ -4,7 +4,8 @@ import { Volume2, VolumeX } from "lucide-react";
 import { StarfieldEngine, type CameraView, type FrameMarker, type PlotBlip, type StarfieldHooks, type StarfieldParams } from "@/components/starfield/engine";
 import { startGaze } from "@/components/starfield/gaze";
 import { clamp01 } from "@/components/starfield/math";
-import { BODIES, CHAPTERS, type BodyDef, bodiesIn, bodyById, chapterById, chapterDone, chapterOpen, goalsIn } from "@/components/starfield/system";
+import { carryOldSaves } from "@/components/starfield/saves";
+import { CHAPTERS, type BodyDef, bodiesIn, bodyById, chapterById, chapterDone, chapterOpen, goalsIn } from "@/components/starfield/system";
 import { TASKS } from "@/components/starfield/tasks";
 import {
   GOODS,
@@ -22,12 +23,12 @@ import {
   stationPay,
 } from "@/components/starfield/trade";
 
-const STORAGE = "slipstream-settings";
-const SURVEY = "slipstream-survey";
-const HELP = "slipstream-help";
-const LOG = "slipstream-log";
-const CHAPTER_KEY = "slipstream-chapter";
-const TRADE_KEY = "slipstream-trade";
+const STORAGE = "starward-settings";
+const SURVEY = "starward-survey";
+const HELP = "starward-help";
+const LOG = "starward-log";
+const CHAPTER_KEY = "starward-chapter";
+const TRADE_KEY = "starward-trade";
 const VIEWS: { id: CameraView; label: string; tip: string }[] = [
   { id: "cockpit", label: "Cockpit", tip: "Look out the nose" },
   { id: "chase", label: "Chase", tip: "Camera behind the ship" },
@@ -76,7 +77,7 @@ function navSections(bodies: BodyNav) {
   return sections;
 }
 
-export function Slipstream() {
+export function Starward() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLElement>(null);
   const warpRef = useRef<HTMLSpanElement>(null);
@@ -165,7 +166,6 @@ export function Slipstream() {
   const paidAt = useRef(Date.now());
   const [gazeOn, setGazeOn] = useState(false);
   const [gazeNote, setGazeNote] = useState("");
-  const [tourOn, setTourOn] = useState(false);
   const [coach, setCoach] = useState("");
   const tourRef = useRef<string[] | null>(null);
   const linkedTarget = useRef<string | null>(null);
@@ -299,7 +299,6 @@ export function Slipstream() {
           } else if (index >= 0) {
             tourRef.current = null;
             queueMicrotask(() => {
-              setTourOn(false);
               setAutopilot(false);
               setCoach("Earth, the Moon, and Mars are charted. Pick the next world.");
             });
@@ -344,6 +343,11 @@ export function Slipstream() {
       window.removeEventListener("pointerup", bump);
       window.removeEventListener("keydown", bump);
     };
+  }, []);
+
+  // Before any load below, so saves from the Slipstream name are found.
+  useEffect(() => {
+    carryOldSaves();
   }, []);
 
   useEffect(() => {
@@ -829,7 +833,6 @@ export function Slipstream() {
   };
   const startFirstFlight = () => {
     tourRef.current = [...FIRST_FLIGHT];
-    setTourOn(true);
     setHint(false);
     setLesson(null);
     setTargetId("earth");

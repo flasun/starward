@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Slipstream } from "@/components/starfield/Slipstream";
+import { Starward } from "@/components/starfield/Starward";
 
 export const Route = createFileRoute("/")({
-  component: Slipstream,
+  component: Starward,
 });
