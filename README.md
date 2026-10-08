@@ -67,15 +67,16 @@ src/routes/      TanStack Start routes
 React 19, TanStack Start, Tailwind v4, and raw WebGL2 (no engine). Nitro builds the server for one of two targets. `vite.config.ts` picks the target from the Vite mode:
 
 - **Vercel** (default). `npm run build`, and every build Grok runs.
-- **Cloudflare Workers** at `starward.vorion.org`. `npm run build:cloudflare` builds with `--mode cloudflare`. Nitro merges `wrangler.jsonc` into the generated `.output/server/wrangler.json`, and `wrangler deploy` from the repo root uses that generated file.
+- **Cloudflare Workers** at `starward.<your-subdomain>.workers.dev`. `npm run build:cloudflare` builds with `--mode cloudflare`. Nitro merges `wrangler.jsonc` into the generated `.output/server/wrangler.json`, and `wrangler deploy` from the repo root uses that generated file.
 
 ### First Cloudflare deploy
 
-1. Make sure vorion.org is a zone in the Cloudflare account you deploy to. A Workers custom domain only works on a zone in the same account, and the hostname can't already have a CNAME record.
-2. Deploy, either way:
-   - **From GitHub (Workers Builds).** In the dashboard, go to Workers & Pages, create a Worker named `starward`, and connect this repository. Set the build command to `npm run build:cloudflare` and leave the deploy command as `npx wrangler deploy`. Every push to `main` then deploys. The Worker name has to match `name` in `wrangler.jsonc`.
-   - **From your machine.** Run `npx wrangler login`, then `npm run deploy:cloudflare`.
-3. On the first deploy, Wrangler attaches `starward.vorion.org` and Cloudflare creates the DNS record and certificate.
+Deploy either way:
+
+- **From GitHub (Workers Builds).** In the dashboard, go to Workers & Pages, create a Worker named `starward`, and connect this repository. Set the build command to `npm run build:cloudflare` and leave the deploy command as `npx wrangler deploy`. Every push to `main` then deploys. The Worker name has to match `name` in `wrangler.jsonc`.
+- **From your machine.** Run `npx wrangler login`, then `npm run deploy:cloudflare`.
+
+To add a custom domain later, put a `routes` entry with `"custom_domain": true` in `wrangler.jsonc`. The domain has to be a zone in the same Cloudflare account, and Cloudflare then creates the DNS record and certificate on the next deploy.
 
 ## Built with Grok
 
