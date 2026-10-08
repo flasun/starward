@@ -15,3 +15,4 @@ screenshots/*
 
 # Written by the local preview server
 .grok/preview.pid
+.grok/preview.log
