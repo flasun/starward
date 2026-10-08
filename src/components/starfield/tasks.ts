@@ -71,7 +71,7 @@ export const TASKS = [
     id: "pole",
     chapter: "stars",
     name: "Pole star",
-    how: "Steer yourself and hold Polaris on the reticle for four seconds.",
+    how: "Steer yourself and keep Polaris on target for four seconds.",
   },
   {
     id: "corona",
@@ -125,7 +125,7 @@ export const TASKS = [
     id: "home",
     chapter: "web",
     name: "Look home",
-    how: "From the Shapley Supercluster, steer yourself and hold the Virgo Cluster on the reticle for three seconds.",
+    how: "From the Shapley Supercluster, steer yourself and keep the Virgo Cluster on target for three seconds.",
   },
   {
     id: "attractor",
@@ -374,7 +374,7 @@ function stepJourney(memory: TaskMemory, ctx: TaskContext, mark: Mark): void {
   if (ctx.chapter === "stars") {
     visitAll(memory, ctx, "neighbours", ["proxima", "alpha", "barnard"], 30, entered, mark);
     const polaris = bodyById("polaris");
-    hold(memory, ctx, "pole", byHand && onReticle(ctx, bodyPosition(polaris, ctx.time), visualRadius(polaris)), 4, mark);
+    hold(memory, ctx, "pole", byHand && onTarget(ctx, bodyPosition(polaris, ctx.time)), 4, mark);
     const stars = bodiesIn("stars").filter((body) => body.form === "star");
     hold(memory, ctx, "corona", skimming(ctx, stars), 3, mark);
   } else if (ctx.chapter === "galaxy") {
@@ -398,7 +398,7 @@ function stepJourney(memory: TaskMemory, ctx: TaskContext, mark: Mark): void {
     const edge = bodyPosition(shapley, ctx.time);
     const atEdge = hypot(edge.x - ship.x, edge.y - ship.y, edge.z - ship.z) < holdRadius(shapley);
     const virgo = bodyById("virgo");
-    hold(memory, ctx, "home", atEdge && byHand && onReticle(ctx, bodyPosition(virgo, ctx.time), visualRadius(virgo)), 3, mark);
+    hold(memory, ctx, "home", atEdge && byHand && onTarget(ctx, bodyPosition(virgo, ctx.time)), 3, mark);
     hold(memory, ctx, "attractor", skimming(ctx, [bodyById("attractor")]), 3, mark);
   }
 }
@@ -495,15 +495,17 @@ function circle(memory: TaskMemory, ctx: TaskContext, task: TaskId, ids: readonl
   if (Math.abs(current.swept) >= Math.PI * 2) mark(task);
 }
 
-/** The place sits on the reticle: within about two degrees of the nose, or under it. */
-function onReticle(ctx: TaskContext, pos: Vec, radius: number): boolean {
+/** The cone the HUD calls On target: about 5.4 degrees either side of the nose. */
+const ON_TARGET = Math.atan(0.16 / 1.7);
+
+function onTarget(ctx: TaskContext, pos: Vec): boolean {
   const dx = pos.x - ctx.shipX;
   const dy = pos.y - ctx.shipY;
   const dz = pos.z - ctx.shipZ;
   const dist = hypot(dx, dy, dz) || 1;
   const forward = cameraForward(ctx.yaw, ctx.pitch);
   const cos = (forward.x * dx + forward.y * dy + forward.z * dz) / dist;
-  return Math.acos(Math.min(1, cos)) < Math.max(0.035, Math.atan(radius / dist));
+  return Math.acos(Math.min(1, cos)) < ON_TARGET;
 }
 
 /** On screen, and big enough to read as a shape: at least 4% of the screen's height across its radius. */

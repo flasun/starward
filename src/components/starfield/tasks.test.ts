@@ -240,13 +240,13 @@ describe("The Near Stars", () => {
   const pole = (look: Vec, extra: Partial<TaskContext> = {}) =>
     flyFor(only("pole"), 5, (time) => frame(ship, look, time, { chapter: "stars", ...extra }));
 
-  it("Pole star counts holding Polaris on the reticle", () => {
+  it("Pole star counts keeping Polaris on target", () => {
     assert.equal(pole(at("polaris", 0)), "pole");
   });
 
-  it("Pole star does not count focus aiming for you, or Polaris off to one side", () => {
+  it("Pole star does not count focus aiming for you, or Polaris off target", () => {
     assert.equal(pole(at("polaris", 0), { focus: true }), null);
-    assert.equal(pole({ ...at("polaris", 0), x: at("polaris", 0).x + 500 }), null);
+    assert.equal(pole({ ...at("polaris", 0), x: at("polaris", 0).x + 800 }), null);
   });
 
   const betelgeuse = at("betelgeuse", 0);
@@ -409,7 +409,7 @@ describe("The Web", () => {
   const look = (ship: Vec, extra: Partial<TaskContext> = {}) =>
     flyFor(only("home"), 4, (time) => frame(ship, at("virgo", 0), time, { chapter: "web", ...extra }));
 
-  it("Look home counts holding Virgo on the reticle from Shapley", () => {
+  it("Look home counts keeping Virgo on target from Shapley", () => {
     assert.equal(look(near("shapley", 400)), "home");
   });
 
