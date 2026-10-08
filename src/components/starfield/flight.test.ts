@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { captureBand, captureWell, holdRadius, orbitLevelRadius, orbitTangent, skinRadius } from "./flight.ts";
+import { captureBand, captureWell, holdRadius, orbitLevelRadius, orbitPace, orbitTangent, skinRadius } from "./flight.ts";
+import { clamp } from "./math.ts";
 import { BODIES } from "./system.ts";
 
 describe("orbit heights", () => {
@@ -41,5 +42,35 @@ describe("orbitTangent", () => {
   it("still gives a direction straight above the body", () => {
     const t = orbitTangent(0.1, 50, 0.1);
     assert.ok(Math.abs(Math.hypot(t.x, t.y, t.z) - 1) < 1e-9);
+  });
+});
+
+describe("orbitPace", () => {
+  const lap = (want: number, reduced = false) => (Math.PI * 2 * want) / orbitPace(want, want, reduced).along;
+  const before = (want: number, dist: number, reduced: boolean) => ({
+    along: clamp(want * (reduced ? 0.16 : 0.28), reduced ? 6 : 8, reduced ? 12 : 16),
+    toward: clamp((dist - want) * 0.9, -14, reduced ? 16 : 26),
+  });
+
+  it("keeps the old pace for every orbit up to Saturn's mid orbit", () => {
+    for (const reduced of [false, true]) {
+      for (let want = 2; want <= 110; want += 4) {
+        for (const dist of [want * 0.5, want, want * 1.5, want + 200]) {
+          assert.deepEqual(orbitPace(want, dist, reduced), before(want, dist, reduced), `${want} ${dist} ${reduced}`);
+        }
+      }
+    }
+  });
+
+  it("takes no longer to lap a galaxy than Saturn", () => {
+    const saturn = lap(110);
+    for (const want of [200, 473, 876, 1927]) assert.ok(Math.abs(lap(want) - saturn) < 1e-9, `${want}`);
+    assert.ok(saturn < 45);
+    assert.ok(Math.abs(lap(876, true) - lap(110, true)) < 1e-9);
+  });
+
+  it("closes on a big orbit's height in proportion to its size", () => {
+    assert.equal(orbitPace(880, 2000, false).toward, 26 * 8);
+    assert.equal(orbitPace(880, 0, false).toward, -14 * 8);
   });
 });

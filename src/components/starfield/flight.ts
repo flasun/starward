@@ -1,6 +1,13 @@
 /** Orbit and capture geometry shared by the flight model and the camera. */
 
+import { clamp } from "./math.ts";
 import { type BodyDef, visualRadius } from "./system.ts";
+
+/**
+ * Orbits up to this radius hold their pace. Every planet's low and mid orbit, and so every lap
+ * round the Sun's worlds, is within it: Saturn's mid orbit is the largest, at 110.
+ */
+const PACE_RADIUS = 110;
 
 export function holdRadius(body: BodyDef): number {
   const vis = visualRadius(body);
@@ -56,4 +63,18 @@ export function orbitTangent(rx: number, ry: number, rz: number): { x: number; y
     len = Math.hypot(x, y, z) || 1;
   }
   return { x: x / len, y: y / len, z: z / len };
+}
+
+/**
+ * How fast a held orbit or lap moves round (`along`), and how fast it closes on its height
+ * (`toward`: positive drops in from outside, negative climbs out from inside). Past PACE_RADIUS
+ * the speeds grow with the orbit, so a lap round a galaxy takes as long as one round Saturn,
+ * about 43 seconds, instead of several minutes.
+ */
+export function orbitPace(want: number, dist: number, reduced: boolean): { along: number; toward: number } {
+  const scale = Math.max(1, want / PACE_RADIUS);
+  return {
+    along: clamp(want * (reduced ? 0.16 : 0.28), reduced ? 6 : 8, (reduced ? 12 : 16) * scale),
+    toward: clamp((dist - want) * 0.9, -14 * scale, (reduced ? 16 : 26) * scale),
+  };
 }

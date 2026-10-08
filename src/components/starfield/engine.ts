@@ -20,7 +20,7 @@ import {
   worldToCamera,
 } from "@/components/starfield/system";
 import { createTaskState, stepTasks, type TaskMemory } from "@/components/starfield/tasks";
-import { captureBand, captureWell, holdRadius, orbitLevelRadius, orbitTangent, skinRadius } from "@/components/starfield/flight";
+import { captureBand, captureWell, holdRadius, orbitLevelRadius, orbitPace, orbitTangent, skinRadius } from "@/components/starfield/flight";
 import { cameraEye } from "@/components/starfield/camera";
 import { FlightInput } from "@/components/starfield/input";
 import { StarfieldRenderer } from "@/components/starfield/renderer";
@@ -503,8 +503,7 @@ export class StarfieldEngine {
         this.orbitSign = along >= 0 ? 1 : -1;
       }
       const tangent = orbitTangent(rx, ry, rz);
-      const vTan = clamp(want * (params.reducedMotion ? 0.16 : 0.28), params.reducedMotion ? 6 : 8, params.reducedMotion ? 12 : 16);
-      const vRad = clamp((dist - want) * 0.9, -14, params.reducedMotion ? 16 : 26);
+      const { along: vTan, toward: vRad } = orbitPace(want, dist, params.reducedMotion);
       let hop = 0;
       for (const other of this.roster()) {
         if (other.id === body.id || other.quiet) continue;
