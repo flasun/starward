@@ -52,7 +52,10 @@ CI (`.github/workflows/ci.yml`) runs typecheck, lint, the game tests, and both b
 
 ```
 src/components/starfield/
-  Starward.tsx   React UI: HUD, nav, briefings, market, log
+  Starward.tsx   Runs the engine, loads and saves, and turns each frame into game events
+  panels/        The UI, one file per panel: TopBar, Markers, Plot, Lesson, FlightLog,
+                 Chrome (hints and toasts), Brief (facts and market), Dock, OrbitLevels
+  kit.ts         What the panels share: the store, the engine, and per-frame painters
   store.ts       Game state and its actions, in one zustand store
   engine.ts      Simulation: flight model, autopilot, orbits, laps, HUD projection
   renderer.ts    Draws each frame: WebGL2, or a 2D canvas fallback
