@@ -396,7 +396,8 @@ function stepJourney(memory: TaskMemory, ctx: TaskContext, mark: Mark): void {
     leg(memory, ctx, "edge", "virgo", "shapley", 40, entered, left, mark);
     const shapley = bodyById("shapley");
     const edge = bodyPosition(shapley, ctx.time);
-    const atEdge = hypot(edge.x - ship.x, edge.y - ship.y, edge.z - ship.z) < holdRadius(shapley);
+    // About 2.7 hops: room to turn round after arriving, since the ship keeps cruising while it turns.
+    const atEdge = hypot(edge.x - ship.x, edge.y - ship.y, edge.z - ship.z) < 1400;
     const virgo = bodyById("virgo");
     hold(memory, ctx, "home", atEdge && byHand && onTarget(ctx, bodyPosition(virgo, ctx.time)), 3, mark);
     hold(memory, ctx, "attractor", skimming(ctx, [bodyById("attractor")]), 3, mark);
