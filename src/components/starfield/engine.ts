@@ -22,6 +22,7 @@ import {
 import { createTaskState, stepTasks, type TaskMemory } from "@/components/starfield/tasks";
 import { captureBand, captureWell, holdRadius, orbitLevelRadius, orbitPace, orbitTangent, skinRadius } from "@/components/starfield/flight";
 import { cameraEye } from "@/components/starfield/camera";
+import { sighted } from "@/components/starfield/handsfree";
 import { FlightInput } from "@/components/starfield/input";
 import { StarfieldRenderer } from "@/components/starfield/renderer";
 import { formatRange, plotSystem } from "@/components/starfield/hud";
@@ -729,6 +730,7 @@ export class StarfieldEngine {
         captureText: this.captureText,
         shipX: this.shipX,
         shipZ: this.shipZ,
+        sightId: this.input.gazing ? sighted(this.picks, this.aspect, (id) => bodyById(id).nav) : "",
       });
     }
   }

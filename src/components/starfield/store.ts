@@ -98,6 +98,8 @@ export type GameActions = {
   flyTo(id: string): void;
   /** Pick a place in the nav. Steering stays with the player. */
   pickTarget(id: string): void;
+  /** Pick the place held in the gaze sights. Nothing holds the view, so the eyes keep steering. */
+  sight(id: string): void;
   /** Hold an orbit round a place, flown by hand. */
   orbitAt(id: string): void;
   /** An orbit height button. The active height again leaves the orbit. */
@@ -311,6 +313,9 @@ export function createGameStore(now = Date.now()): GameStore {
     },
     pickTarget(id) {
       set({ targetId: id, orbit: false, autopilot: false, focus: true, navOpen: false });
+    },
+    sight(id) {
+      set({ targetId: id, orbit: false, autopilot: false, focus: false, navOpen: false });
     },
     orbitAt(id) {
       set(orbiting(id));

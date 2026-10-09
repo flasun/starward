@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { StarfieldEngine, type StarfieldHooks } from "@/components/starfield/engine";
 import { startGaze } from "@/components/starfield/gaze";
+import { Dwell, LongBlink } from "@/components/starfield/handsfree";
 import { type FrameSnap, GameContext, createGameKit } from "@/components/starfield/kit";
 import { Chrome } from "@/components/starfield/panels/Chrome";
 import { Dock } from "@/components/starfield/panels/Dock";
@@ -40,6 +41,7 @@ export function Starward() {
   const lockedAt = useRef(0);
   const wasLocked = useRef(false);
   const linkedTarget = useRef<string | null>(null);
+  const [dwell] = useState(() => new Dwell());
 
   /** The payoff for a new place: a card, a bell, a ring on its label, and a tap on phones. */
   function celebrateChart(id: string) {
@@ -119,6 +121,27 @@ export function Starward() {
       alertSeen.current = snap.alert;
       store.setState({ alert: snap.alert });
     }
+    if (stage) holdSights(stage, snap.sightId);
+  }
+
+  /**
+   * Hands-free: a world held in the sights fills a ring round the reticle, then becomes the target.
+   * Only while the eyes are steering: not on autopilot, in an orbit, or held on a target.
+   */
+  function holdSights(stage: HTMLElement, sightId: string) {
+    const { autopilot, orbit, focus, paused, lesson, targetId, sight, notify } = store.getState();
+    const open = sightId !== targetId && !autopilot && !orbit && !focus && !paused && lesson === null;
+    const { progress, picked } = dwell.update(open ? sightId : "", performance.now());
+    if (progress > 0) {
+      stage.dataset.dwell = "true";
+      stage.style.setProperty("--dwell", progress.toFixed(3));
+    } else if (stage.dataset.dwell) {
+      delete stage.dataset.dwell;
+      stage.style.removeProperty("--dwell");
+    }
+    if (!picked) return;
+    sight(picked);
+    notify(`${bodyById(picked).name} picked`, "Close your eyes for a moment to fly there.");
   }
 
   // Everything these read is a ref or the store, so the first render's functions stay current.
@@ -255,11 +278,22 @@ export function Starward() {
     }
     let stop = () => {};
     let dead = false;
+    const blink = new LongBlink();
     store.setState({ gazeNote: "Starting gaze" });
     void startGaze({
       onSample: (x, y) => engineRef.current?.setGaze(x, y, true),
       onStatus: (text) => {
         if (!dead) store.setState({ gazeNote: text });
+      },
+      // A long blink is the Go button, or Next on a help card, or the way out of a pause.
+      onEyes: (closed) => {
+        if (!dead && blink.update(closed, performance.now())) store.getState().press("go");
+      },
+      onReady: () => {
+        if (dead) return;
+        store.setState({
+          coach: "Hands-free: hold a world in the sights to pick it. Close your eyes for a moment to Go or Stop. Look well aside to take the controls.",
+        });
       },
     })
       .then((dispose) => {
