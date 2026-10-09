@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { SAVE_KEY, freshSave, type SaveStorage } from "./saves.ts";
-import { AWAY_MS, FIRST_FLIGHT, createGameStore, keepSaved, paramsOf, saveOf } from "./store.ts";
+import { AWAY_MS, FIRST_FLIGHT, createGameStore, keepSaved, paramsOf, saveOf, tradeCue } from "./store.ts";
 import { navIn } from "./system.ts";
 import { HOLD_MAX, STATION_LIMIT, priceOf, stationCost } from "./trade.ts";
 
@@ -279,3 +279,23 @@ describe("panels", () => {
 function pick(state: { orbit: boolean; boost: boolean; autopilot: boolean; focus: boolean }) {
   return { orbit: state.orbit, boost: state.boost, autopilot: state.autopilot, focus: state.focus };
 }
+
+describe("tradeCue", () => {
+  it("hears a buy, a sale, and a deploy, and nothing for station pay", () => {
+    const store = createGameStore(NOW);
+    const states = [store.getState()];
+    const step = (change: () => void) => {
+      change();
+      states.push(store.getState());
+      return tradeCue(states.at(-2)!, states.at(-1)!);
+    };
+    store.setState({ nearId: "mars", credits: 1000 });
+    states.push(store.getState());
+    assert.equal(step(() => store.getState().buy("water")), "buy");
+    assert.equal(step(() => store.getState().sell("water")), "sell");
+    store.setState({ nearId: "" });
+    states.push(store.getState());
+    assert.equal(step(() => store.getState().deployStation({ x: 1, z: 1 }, NOW)), "station");
+    assert.equal(step(() => store.getState().payStations(NOW + 60_000)), null);
+  });
+});

@@ -11,7 +11,7 @@ import { Markers } from "@/components/starfield/panels/Markers";
 import { Plot } from "@/components/starfield/panels/Plot";
 import { TopBar } from "@/components/starfield/panels/TopBar";
 import { browserStorage, loadSave, writeSave } from "@/components/starfield/saves";
-import { keepSaved, paramsOf, saveOf } from "@/components/starfield/store";
+import { keepSaved, paramsOf, saveOf, tradeCue } from "@/components/starfield/store";
 import { bodyById, chapterById, chapterOpen, goalsIn, isChartable } from "@/components/starfield/system";
 import { TASKS } from "@/components/starfield/tasks";
 
@@ -54,7 +54,7 @@ export function Starward() {
           ? `All ${goals.length} charted. Onward is open.`
           : `All ${goals.length} charted. The journey is complete.`;
     notify(`${bodyById(id).name} charted`, detail, true);
-    engineRef.current?.chime("chart");
+    engineRef.current?.cue("chart");
     const el = stageRef.current?.querySelector<HTMLElement>(`.marker[data-id="${id}"]`);
     if (el) {
       el.classList.remove("is-new");
@@ -74,7 +74,7 @@ export function Starward() {
     if (!logTask(id, seconds)) return;
     const name = TASKS.find((task) => task.id === id)?.name ?? "Task";
     notify(name, `Flight log · ${store.getState().log.length} of ${TASKS.length}`, true);
-    engineRef.current?.chime("task");
+    engineRef.current?.cue("task");
   }
 
   function onFrame(snap: FrameSnap) {
@@ -184,6 +184,16 @@ export function Starward() {
     writeSave(storage, saveOf(store.getState()));
     return keepSaved(store, storage);
   }, [store]);
+
+  // After the load above, so loading a save makes no sound.
+  useEffect(
+    () =>
+      store.subscribe((next, prev) => {
+        const cue = tradeCue(prev, next);
+        if (cue) engineRef.current?.cue(cue);
+      }),
+    [engineRef, store],
+  );
 
   useEffect(() => {
     const timer = window.setInterval(() => store.getState().payStations(Date.now()), 5000);
