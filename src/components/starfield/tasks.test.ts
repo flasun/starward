@@ -114,9 +114,10 @@ describe("Soft arrival", () => {
     assert.equal(arrive({ speed: 15 }), "soft");
   });
 
-  it("does not count arriving fast or on autopilot", () => {
+  it("does not count arriving fast, on autopilot, or carried in by an orbit", () => {
     assert.equal(arrive({ speed: 30 }), null);
     assert.equal(arrive({ speed: 15, autopilot: true, earned: false }), null);
+    assert.equal(arrive({ speed: 15, orbiting: true }), null);
   });
 });
 

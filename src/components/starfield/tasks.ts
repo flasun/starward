@@ -17,7 +17,7 @@ export const TASKS = [
     id: "soft",
     chapter: "sun",
     name: "Soft arrival",
-    how: "Reach a world yourself, slower than warp 0.9. Go does not count.",
+    how: "Reach a world yourself, slower than warp 0.9. Go or an orbit does not count.",
   },
   {
     id: "sling",
@@ -230,7 +230,8 @@ function stepSolarSystem(memory: TaskMemory, ctx: TaskContext, mark: Mark): void
     const was = memory.inside[body.id] ?? false;
     const inside = dist < bubble;
     memory.inside[body.id] = inside;
-    if (!memory.done.soft && inside && !was && !ctx.autopilot && ctx.speed < SOFT_SPEED) mark("soft");
+    // An orbit carries the ship in at orbit pace, so only a hand-flown arrival counts.
+    if (!memory.done.soft && inside && !was && !ctx.autopilot && !ctx.orbiting && ctx.speed < SOFT_SPEED) mark("soft");
   }
 
   slingshot(memory, ctx, GIANTS, "sling", mark);
