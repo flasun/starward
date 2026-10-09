@@ -5,6 +5,8 @@
 
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { Cue } from "./audio.ts";
+import type { GameCommand } from "./gamepad.ts";
+import { LESSONS } from "./lessons.ts";
 import { clamp01 } from "./math.ts";
 import { type LogEntry, type Save, type SaveStorage, SAVE_VERSION, freshSave, writeSave } from "./saves.ts";
 import { bodyById, nextInNav } from "./system.ts";
@@ -132,6 +134,8 @@ export type GameActions = {
   closeLesson(): void;
   /** Escape closes the top panel, or pauses when none is open. */
   back(): void;
+  /** A gamepad button. */
+  press(command: GameCommand): void;
 };
 
 export type Game = GameState & GameActions;
@@ -201,6 +205,14 @@ export function paramsOf(state: GameState): StarfieldParams {
     depots: stationsIn(state.depots, state.chapterId),
   };
 }
+
+/** The First flight offer is up: a new pilot, nothing charted, not flying anywhere yet. */
+export function firstFlightOffered(state: GameState): boolean {
+  return state.offerOpen && state.charted.length === 0 && state.lesson === null && !state.autopilot;
+}
+
+/** Each press of the D-pad changes the cruise by about one wheel notch. */
+export const PAD_SPEED_STEP = 0.06;
 
 /** The sound for what just changed in the hold or the stations: a buy, a sale, or a deploy. */
 export function tradeCue(prev: GameState, next: GameState): Cue | null {
@@ -426,6 +438,50 @@ export function createGameStore(now = Date.now()): GameStore {
       else if (moreOpen) set({ moreOpen: false });
       else if (navOpen) set({ navOpen: false });
       else set((state) => ({ paused: !state.paused }));
+    },
+    press(command) {
+      const state = get();
+      switch (command) {
+        // A answers whatever is asking: the help card, a pause, the First flight offer. Then Go.
+        case "go":
+          if (state.lesson !== null) {
+            if (state.lesson + 1 < LESSONS.length) set({ lesson: state.lesson + 1 });
+            else state.closeLesson();
+          } else if (state.paused) set({ paused: false });
+          else if (firstFlightOffered(state)) state.startFirstFlight();
+          else state.toggleAutopilot();
+          return;
+        // B closes and resumes, like Escape, but never pauses mid-flight.
+        case "back":
+          if (state.lesson !== null || state.logOpen || state.moreOpen || state.navOpen || state.paused) state.back();
+          else if (firstFlightOffered(state)) set({ offerOpen: false });
+          return;
+        case "pause":
+          state.back();
+          return;
+        case "view":
+          state.cycleView();
+          return;
+        case "orbit":
+          state.toggleOrbit();
+          return;
+        case "boost":
+          state.toggleBoost();
+          return;
+        case "faster":
+        case "slower":
+          state.setSpeed(state.speed + (command === "faster" ? PAD_SPEED_STEP : -PAD_SPEED_STEP));
+          return;
+        case "prev":
+        case "next": {
+          const place = nextInNav(state.chapterId, state.targetId, command === "next" ? 1 : -1);
+          if (place && place.id !== state.targetId) state.pickTarget(place.id);
+          return;
+        }
+        case "log":
+          state.toggleLog();
+          return;
+      }
     },
   }));
 }

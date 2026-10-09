@@ -527,11 +527,15 @@ export function navIn(chapter: string): BodyDef[] {
   return bodiesIn(chapter).filter((body) => body.nav);
 }
 
-/** The place after `id` in the nav, wrapping round. The first place when `id` is not listed. */
-export function nextInNav(chapter: string, id: string): BodyDef | undefined {
+/**
+ * The place `step` on from `id` in the nav, wrapping round; -1 is the one before. When `id` is not
+ * listed, the first place going forward and the last going back.
+ */
+export function nextInNav(chapter: string, id: string, step = 1): BodyDef | undefined {
   const nav = navIn(chapter);
   const index = nav.findIndex((body) => body.id === id);
-  return nav[(index + 1 + nav.length) % nav.length];
+  if (index < 0) return step < 0 ? nav[nav.length - 1] : nav[0];
+  return nav[(((index + step) % nav.length) + nav.length) % nav.length];
 }
 
 /** A place that counts toward some chapter's chart. */

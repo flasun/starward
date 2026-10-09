@@ -1,5 +1,7 @@
 /** The engine's public surface: what the UI passes in and what each frame reports back. */
 
+import type { GameCommand } from "./gamepad.ts";
+
 export type CameraView = "cockpit" | "chase" | "left" | "right" | "above";
 
 export type StarfieldParams = {
@@ -77,6 +79,9 @@ export type StarfieldHooks = {
   onBeginLap: (id: string) => void;
   onEndLap: () => void;
   onTask: (id: string, seconds: number) => void;
+  /** A gamepad button the game handles. */
+  onPad: (command: GameCommand) => void;
+  onGamepad: (connected: boolean) => void;
 };
 
 declare global {

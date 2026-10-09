@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useActions, useGame, useKit } from "@/components/starfield/kit";
 import { Brief } from "@/components/starfield/panels/Brief";
+import { firstFlightOffered } from "@/components/starfield/store";
 
 const TOAST_MS = 2600;
 const REWARD_MS = 3400;
@@ -23,7 +24,7 @@ function Hint() {
   const { store } = useKit();
   const { startFirstFlight } = useActions();
   // Stays up until the player takes it, waves it off, or charts a place.
-  const offer = useGame((game) => game.offerOpen && game.charted.length === 0 && game.lesson === null && !game.autopilot);
+  const offer = useGame(firstFlightOffered);
   const shown = useGame((game) => game.hint && game.lesson === null && !game.coach);
   const coach = useGame((game) => game.coach);
 

@@ -8,7 +8,7 @@ Fly a real solar system, then the near stars, the Milky Way, and the galaxy clus
 - **Real places.** Sizes and orbital periods are real. Distances are compressed so a flight can cross them.
 - **Flight log.** Twenty challenges, a set for every chapter: an eclipse and a ring cut round the Sun, a corona skim in the near stars, a dive to the galactic core, a postcard of home from beyond Andromeda, a brush past the Great Attractor, and a run to the edge of the map. Each is logged with your time.
 - **Trade and stations.** Every place you can chart has a market: buy goods where they are cheap and sell where they are dear. Every chapter's open space takes stations that pay while you fly. Prices, station costs, and station pay rise chapter by chapter.
-- **Cameras and steering.** Cockpit, chase, either wing, and overhead views. Three orbit heights, autopilot, and optional webcam gaze steering that runs on the device (MediaPipe).
+- **Cameras and steering.** Cockpit, chase, either wing, and overhead views. Three orbit heights, autopilot, gamepads, and optional webcam gaze steering that runs on the device (MediaPipe).
 - **No account.** Progress saves in the browser, in one versioned `starward-save` entry.
 
 ### Controls
@@ -21,6 +21,22 @@ Fly a real solar system, then the near stars, the Milky Way, and the galaxy clus
 | Space | Warp |
 | Escape | Pause |
 | Double-tap a world | Fly there and orbit it |
+
+With a gamepad (any pad the browser maps to the standard layout; press a button to wake it):
+
+| Button | Action |
+| --- | --- |
+| Left stick | Steer |
+| A | Go / Stop; Next on a help card; resume from pause |
+| B | Close the open panel, or resume |
+| X | Orbit |
+| Y | Camera |
+| LB / RB, D-pad left / right | Previous / next place |
+| D-pad up / down | Faster / slower (hold to keep stepping) |
+| RT | Warp |
+| LT | Level the nose |
+| Back / View | Flight log |
+| Start / Menu | Pause (like Escape) |
 
 ## Run it
 
@@ -60,7 +76,8 @@ src/components/starfield/
   engine.ts      Simulation: flight model, autopilot, orbits, laps, HUD projection
   renderer.ts    Draws each frame: WebGL2, or a 2D canvas fallback
   shaders/       GLSL for the background, stars, planets, ship, and trail
-  input.ts       Pointer, keys, wheel, and gaze, turned into a steering stick
+  input.ts       Pointer, keys, wheel, gaze, and gamepads, turned into a steering stick
+  gamepad.ts     Gamepad reading: dead zone, button presses, the button map
   camera.ts      Where the camera sits for each view
   flight.ts      Orbit and capture geometry
   hud.ts         Range text and the minimap plot
@@ -72,7 +89,8 @@ src/components/starfield/
   trade.ts       Prices and station income
   saves.ts       The versioned save, and reading the older per-part keys
   gaze.ts        Webcam gaze steering
-  audio.ts       Engine sound
+  audio.ts       Engine sound, chapter ambience, and cues
+  lessons.ts     The help cards' text
   *.test.ts      Unit tests for the logic files, run with Node's test runner
 src/routes/      TanStack Start routes
 ```
