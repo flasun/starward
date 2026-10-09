@@ -102,7 +102,7 @@ export type GameActions = {
   sight(id: string): void;
   /** Hold an orbit round a place, flown by hand. */
   orbitAt(id: string): void;
-  /** An orbit height button. The active height again leaves the orbit. */
+  /** An orbit height button: flies in and takes that orbit. The active height again leaves it. */
   pickOrbit(id: string, level: number): void;
   /** Double-tap a world. Again on the world being orbited lets go. */
   focusOn(id: string): void;
@@ -234,6 +234,11 @@ export function keepSaved(store: GameStore, storage: SaveStorage | null): () => 
 
 const flying = (id: string) => ({ targetId: id, orbit: false, boost: false, autopilot: true, focus: true });
 const orbiting = (id: string) => ({ targetId: id, orbit: true, boost: false, autopilot: false, focus: false });
+/**
+ * Take an orbit from wherever the ship is: the autopilot brings it in, and the engine hands over
+ * once the orbit catches. Without it, a ship outside the catch, or moving away, never comes back.
+ */
+const joining = (id: string) => ({ ...orbiting(id), autopilot: true });
 
 export function createGameStore(now = Date.now()): GameStore {
   let toastSeq = 0;
@@ -322,8 +327,8 @@ export function createGameStore(now = Date.now()): GameStore {
     },
     pickOrbit(id, level) {
       const { orbit, targetId, orbitLevel } = get();
-      if (orbit && targetId === id && orbitLevel === level) set({ orbit: false });
-      else set({ orbitLevel: level, ...orbiting(id) });
+      if (orbit && targetId === id && orbitLevel === level) set({ orbit: false, autopilot: false });
+      else set({ orbitLevel: level, ...joining(id) });
     },
     focusOn(id) {
       const { targetId, orbit } = get();

@@ -86,6 +86,15 @@ describe("flight", () => {
     assert.equal(store.getState().orbit, false);
   });
 
+  it("flies in to take a height from wherever the ship is, and leaving stops the approach too", () => {
+    const store = createGameStore(NOW);
+    store.setState({ boost: true, focus: true });
+    store.getState().pickOrbit("earth", 0);
+    assert.deepEqual(pick(store.getState()), { orbit: true, boost: false, autopilot: true, focus: false });
+    store.getState().pickOrbit("earth", 0);
+    assert.deepEqual(pick(store.getState()), { orbit: false, boost: false, autopilot: false, focus: false });
+  });
+
   it("flies to a double-tapped world and orbits it, and lets go on a second tap", () => {
     const store = createGameStore(NOW);
     store.getState().focusOn("jupiter");
