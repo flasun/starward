@@ -6,6 +6,11 @@
 import { type PadCommand, PadReader } from "./gamepad.ts";
 import { clamp, shape } from "./math.ts";
 
+/** How far aside, and for how long, a look takes the controls back. It lets go nearer the center. */
+const GAZE_TAKE = 0.6;
+const GAZE_LET_GO = 0.4;
+const GAZE_TAKE_MS = 800;
+
 /** What input asks of the engine. */
 export type InputIntents = {
   unlockAudio: () => void;
@@ -53,16 +58,21 @@ export class FlightInput {
   private gazeOn = false;
   private gazeX = 0;
   private gazeY = 0;
+  private gazeSince: number | null = null;
+  private gazeTaking = false;
   private readonly pads = new PadReader();
   private padsOn = 0;
   private padX = 0;
   private padY = 0;
   private padActive = false;
 
-  constructor(
-    private readonly canvas: HTMLCanvasElement,
-    private readonly intents: InputIntents,
-  ) {}
+  private readonly canvas: HTMLCanvasElement;
+  private readonly intents: InputIntents;
+
+  constructor(canvas: HTMLCanvasElement, intents: InputIntents) {
+    this.canvas = canvas;
+    this.intents = intents;
+  }
 
   bind(signal: AbortSignal): void {
     window.addEventListener("pointermove", this.onPointerMove, { signal });
@@ -99,11 +109,23 @@ export class FlightInput {
     for (const command of read.presses) this.intents.pad(command);
   }
 
-  /** Smoothed look from the webcam. Does not count as a steer that leaves an orbit. */
-  setGaze(x: number, y: number, on: boolean): void {
+  /**
+   * Smoothed look from the webcam. A glance does not leave an orbit, a lock, or the autopilot;
+   * looking well aside for a moment does.
+   */
+  setGaze(x: number, y: number, on: boolean, now = performance.now()): void {
     this.gazeOn = on;
     this.gazeX = clamp(x, -1, 1);
     this.gazeY = clamp(y, -1, 1);
+    // Timed by the clock, not the frame, so a slow device takes over just as soon.
+    const far = on ? Math.hypot(this.gazeX, this.gazeY) : 0;
+    if (far > (this.gazeTaking ? GAZE_LET_GO : GAZE_TAKE)) {
+      this.gazeSince ??= now;
+      this.gazeTaking = now - this.gazeSince > GAZE_TAKE_MS;
+    } else {
+      this.gazeSince = null;
+      this.gazeTaking = false;
+    }
   }
 
   /** Once a frame, before the stick: focus starting or ending, and a tap's steer coming due. */
@@ -126,10 +148,19 @@ export class FlightInput {
     }
   }
 
-  /** Steering by hand: a pointer dragged or a stick pushed past the dead zone, or a flight key held. */
+  /** Gaze is on and steering. */
+  get gazing(): boolean {
+    return this.gazeOn;
+  }
+
+  /**
+   * Steering by hand: a pointer dragged or a stick pushed past the dead zone, a flight key held,
+   * or a look held well aside.
+   */
   manual(): boolean {
     return (
       (this.hasPointer && Math.abs(this.smoothPX) + Math.abs(this.smoothPY) > 0.55) ||
+      this.gazeTaking ||
       Math.hypot(this.padX, this.padY) > 0.2 ||
       this.keys.has("KeyA") ||
       this.keys.has("KeyD") ||

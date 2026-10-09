@@ -69,6 +69,8 @@ export type StarfieldHooks = {
     captureText: string;
     shipX: number;
     shipZ: number;
+    /** With gaze on, the place under the reticle; otherwise empty. */
+    sightId: string;
   }) => void;
   onError: (message: string) => void;
   onCancelAutopilot: () => void;

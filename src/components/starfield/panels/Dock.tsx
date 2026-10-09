@@ -262,7 +262,7 @@ function MorePanel() {
         </button>
         <button
           type="button"
-          data-tip="Steer by looking. The camera stays on this device."
+          data-tip="Fly hands-free with your eyes. The camera stays on this device."
           aria-pressed={gazeOn}
           onClick={() => store.setState({ gazeOn: !gazeOn })}
         >

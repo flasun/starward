@@ -8,7 +8,7 @@ Fly a real solar system, then the near stars, the Milky Way, and the galaxy clus
 - **Real places.** Sizes and orbital periods are real. Distances are compressed so a flight can cross them.
 - **Flight log.** Twenty challenges, a set for every chapter: an eclipse and a ring cut round the Sun, a corona skim in the near stars, a dive to the galactic core, a postcard of home from beyond Andromeda, a brush past the Great Attractor, and a run to the edge of the map. Each is logged with your time.
 - **Trade and stations.** Every place you can chart has a market: buy goods where they are cheap and sell where they are dear. Every chapter's open space takes stations that pay while you fly. Prices, station costs, and station pay rise chapter by chapter.
-- **Cameras and steering.** Cockpit, chase, either wing, and overhead views. Three orbit heights, autopilot, gamepads, and optional webcam gaze steering that runs on the device (MediaPipe).
+- **Cameras and steering.** Cockpit, chase, either wing, and overhead views. Three orbit heights, autopilot, gamepads, and optional hands-free flying by gaze, which runs on the device (MediaPipe).
 - **No account.** Progress saves in the browser, in one versioned `starward-save` entry.
 
 ### Controls
@@ -37,6 +37,15 @@ With a gamepad (any pad the browser maps to the standard layout; press a button 
 | LT | Level the nose |
 | Back / View | Flight log |
 | Start / Menu | Pause (like Escape) |
+
+Hands-free, with Gaze on in More (the camera stays on the device):
+
+| Do this | And |
+| --- | --- |
+| Look | Steer |
+| Hold a world in the sights for a moment and a ring fills | It becomes the target |
+| Close your eyes for about a second, then open them | Go / Stop; also Next on a help card, and resume from pause |
+| Look well aside for about a second | Take the controls back from autopilot, an orbit, or a held target |
 
 ## Run it
 
@@ -78,6 +87,7 @@ src/components/starfield/
   shaders/       GLSL for the background, stars, planets, ship, and trail
   input.ts       Pointer, keys, wheel, gaze, and gamepads, turned into a steering stick
   gamepad.ts     Gamepad reading: dead zone, button presses, the button map
+  handsfree.ts   Hands-free gaze: what is in the sights, the dwell, the long blink
   camera.ts      Where the camera sits for each view
   flight.ts      Orbit and capture geometry
   hud.ts         Range text and the minimap plot

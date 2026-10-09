@@ -277,6 +277,17 @@ describe("panels", () => {
   });
 });
 
+describe("gaze", () => {
+  it("picks the place in the sights without holding the view, so the eyes keep steering", () => {
+    const store = createGameStore(NOW);
+    store.setState({ focus: true, navOpen: true });
+    store.getState().sight("mars");
+    assert.equal(store.getState().targetId, "mars");
+    assert.deepEqual(pick(store.getState()), { orbit: false, boost: false, autopilot: false, focus: false });
+    assert.equal(store.getState().navOpen, false);
+  });
+});
+
 describe("gamepad", () => {
   it("A takes the First flight, then is Go and Stop", () => {
     const store = createGameStore(NOW);

@@ -727,6 +727,22 @@
   opacity: 1;
 }
 
+/* Hands-free: a ring fills round the reticle while a world is held in the gaze sights. */
+.reticle::before {
+  content: "";
+  position: absolute;
+  inset: -0.85rem;
+  border-radius: 999px;
+  background: conic-gradient(var(--color-accent) calc(var(--dwell, 0) * 1turn), transparent 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-smooth-out);
+}
+
+.stage[data-dwell="true"] .reticle::before {
+  opacity: 1;
+}
+
 .stage[data-locked="true"] .go-btn:not([aria-pressed="true"]) {
   box-shadow: inset 0 0 0 1px var(--color-fg);
 }
