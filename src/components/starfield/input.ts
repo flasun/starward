@@ -1,5 +1,9 @@
-/** Pointer, keys, wheel, and gaze, turned into a steering stick and a few intents for the engine. */
+/**
+ * Pointer, keys, wheel, gaze, and gamepads, turned into a steering stick and a few intents for
+ * the engine.
+ */
 
+import { type PadCommand, PadReader } from "./gamepad.ts";
 import { clamp, shape } from "./math.ts";
 
 /** What input asks of the engine. */
@@ -12,6 +16,10 @@ export type InputIntents = {
   wheel: (step: number) => void;
   /** A second tap in the same spot: try to focus whatever is under it. */
   doubleTap: (clientX: number, clientY: number) => void;
+  /** A gamepad button. */
+  pad: (command: PadCommand) => void;
+  /** A gamepad plugged in, or the last one gone. */
+  gamepad: (connected: boolean) => void;
 };
 
 export class FlightInput {
@@ -45,6 +53,11 @@ export class FlightInput {
   private gazeOn = false;
   private gazeX = 0;
   private gazeY = 0;
+  private readonly pads = new PadReader();
+  private padsOn = 0;
+  private padX = 0;
+  private padY = 0;
+  private padActive = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -62,6 +75,28 @@ export class FlightInput {
     window.addEventListener("blur", this.clearKeys, { signal });
     window.addEventListener("wheel", this.onWheel, { passive: false, signal });
     document.addEventListener("visibilitychange", this.onVis, { signal });
+    window.addEventListener("gamepadconnected", this.onPadConnected, { signal });
+    window.addEventListener("gamepaddisconnected", this.onPadDisconnected, { signal });
+  }
+
+  /** Once a frame, paused or not, so Start and B still work. Nothing to read until a pad connects. */
+  pollPads(now: number): void {
+    if (this.padsOn === 0) return;
+    let pads: readonly (Gamepad | null)[];
+    try {
+      pads = navigator.getGamepads();
+    } catch {
+      return;
+    }
+    const read = this.pads.read(pads, now);
+    this.padX = read.x;
+    this.padY = read.y;
+    if (read.active && !this.padActive) {
+      this.intents.unlockAudio();
+      this.engaged = true;
+    }
+    this.padActive = read.active;
+    for (const command of read.presses) this.intents.pad(command);
   }
 
   /** Smoothed look from the webcam. Does not count as a steer that leaves an orbit. */
@@ -91,10 +126,11 @@ export class FlightInput {
     }
   }
 
-  /** Steering by hand: a pointer dragged past the dead zone, or a flight key held. */
+  /** Steering by hand: a pointer dragged or a stick pushed past the dead zone, or a flight key held. */
   manual(): boolean {
     return (
       (this.hasPointer && Math.abs(this.smoothPX) + Math.abs(this.smoothPY) > 0.55) ||
+      Math.hypot(this.padX, this.padY) > 0.2 ||
       this.keys.has("KeyA") ||
       this.keys.has("KeyD") ||
       this.keys.has("ArrowLeft") ||
@@ -131,7 +167,7 @@ export class FlightInput {
     };
   }
 
-  /** The stick this frame: pointer, tap-to-steer, or gaze, then keys on top. */
+  /** The stick this frame: pointer, tap-to-steer, or gaze, then keys and the gamepad on top. */
   readStick(dt: number, reduced: boolean): { x: number; y: number } {
     if (this.guide) {
       const fade = Math.exp(-1.8 * dt);
@@ -151,6 +187,8 @@ export class FlightInput {
     if (this.keys.has("KeyD") || this.keys.has("ArrowRight")) x += 1;
     if (this.keys.has("KeyW") || this.keys.has("ArrowUp")) y -= 1;
     if (this.keys.has("KeyS") || this.keys.has("ArrowDown")) y += 1;
+    x += this.padX;
+    y += this.padY;
     x -= this.steerOverride;
     return { x: clamp(x, -1, 1), y: clamp(y, -1, 1) };
   }
@@ -257,6 +295,21 @@ export class FlightInput {
     e.preventDefault();
     this.engaged = true;
     this.intents.wheel(clamp(e.deltaY / 1400, -0.06, 0.06));
+  };
+
+  private onPadConnected = (): void => {
+    this.padsOn += 1;
+    this.intents.gamepad(true);
+  };
+
+  private onPadDisconnected = (): void => {
+    this.padsOn = Math.max(0, this.padsOn - 1);
+    if (this.padsOn > 0) return;
+    this.pads.reset();
+    this.padX = 0;
+    this.padY = 0;
+    this.padActive = false;
+    this.intents.gamepad(false);
   };
 
   private onVis = (): void => {

@@ -139,6 +139,12 @@ export function Starward() {
         onError: (message) => store.setState({ error: message }),
         onTask,
         onFrame,
+        onPad: game.press,
+        onGamepad: (connected) =>
+          game.notify(
+            connected ? "Gamepad ready" : "Gamepad disconnected",
+            connected ? "Left stick steers. A is Go, RT warps, Y changes the camera." : undefined,
+          ),
       },
     };
   });

@@ -145,6 +145,11 @@ export class StarfieldEngine {
         this.hooks.current.onSpeed(clamp(params.speed - step, 0, 1));
       },
       doubleTap: (clientX, clientY) => this.tryFocus(clientX, clientY),
+      pad: (command) => {
+        if (command === "level") this.level();
+        else this.hooks.current.onPad(command);
+      },
+      gamepad: (connected) => this.hooks.current.onGamepad(connected),
     });
   }
 
@@ -317,6 +322,8 @@ export class StarfieldEngine {
     }
     const dt = Math.min(0.05, Math.max(0.001, (now - (this.prevNow || now)) / 1000));
     this.prevNow = now;
+    // Before the params, so a button press counts this frame.
+    this.input.pollPads(now);
     // Read once, so a hook that changes the params mid-frame takes effect from the next frame.
     const params = this.hooks.current.getParams();
     this.step(dt, params);

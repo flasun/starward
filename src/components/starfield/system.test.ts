@@ -100,7 +100,15 @@ describe("nextInNav", () => {
     assert.equal(nextInNav("sun", nav.at(-1)!.id), nav[0]);
   });
 
-  it("starts from the top for a place the nav does not list", () => {
+  it("starts from the top for a place the nav does not list, or the bottom going back", () => {
     assert.equal(nextInNav("sun", "atlantis"), navIn("sun")[0]);
+    assert.equal(nextInNav("sun", "atlantis", -1), navIn("sun").at(-1));
+  });
+
+  it("steps back, wrapping round the other way", () => {
+    const nav = navIn("stars");
+    assert.equal(nextInNav("stars", nav[1]!.id, -1), nav[0]);
+    assert.equal(nextInNav("stars", nav[0]!.id, -1), nav.at(-1));
+    for (const body of nav) assert.equal(nextInNav("stars", nextInNav("stars", body.id)!.id, -1), body);
   });
 });

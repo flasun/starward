@@ -1,7 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { SAVE_KEY, freshSave, type SaveStorage } from "./saves.ts";
-import { AWAY_MS, FIRST_FLIGHT, createGameStore, keepSaved, paramsOf, saveOf, tradeCue } from "./store.ts";
+import { LESSONS } from "./lessons.ts";
+import { AWAY_MS, FIRST_FLIGHT, PAD_SPEED_STEP, createGameStore, keepSaved, paramsOf, saveOf, tradeCue } from "./store.ts";
 import { navIn } from "./system.ts";
 import { HOLD_MAX, STATION_LIMIT, priceOf, stationCost } from "./trade.ts";
 
@@ -273,6 +274,88 @@ describe("panels", () => {
     assert.deepEqual(store.getState().toasts.map((toast) => toast.title), ["One", "Two"]);
     store.getState().dropToast();
     assert.deepEqual(store.getState().toasts.map((toast) => [toast.title, toast.reward]), [["Two", true]]);
+  });
+});
+
+describe("gamepad", () => {
+  it("A takes the First flight, then is Go and Stop", () => {
+    const store = createGameStore(NOW);
+    store.getState().press("go");
+    assert.equal(store.getState().tour?.[0], FIRST_FLIGHT[0]);
+    assert.equal(store.getState().autopilot, true);
+    store.getState().press("go");
+    assert.equal(store.getState().autopilot, false);
+    store.getState().press("go");
+    assert.equal(store.getState().autopilot, true);
+  });
+
+  it("A pages through help and flies off the last card; B skips it", () => {
+    const store = createGameStore(NOW);
+    store.getState().openHelp();
+    for (let i = 1; i < LESSONS.length; i++) {
+      store.getState().press("go");
+      assert.equal(store.getState().lesson, i);
+    }
+    store.getState().press("go");
+    assert.deepEqual([store.getState().lesson, store.getState().helpSeen, store.getState().autopilot], [null, true, false]);
+    store.getState().openHelp();
+    store.getState().press("back");
+    assert.equal(store.getState().lesson, null);
+  });
+
+  it("B closes panels and resumes, but never pauses; Start is Escape", () => {
+    const store = createGameStore(NOW);
+    store.setState({ offerOpen: false, logOpen: true, navOpen: true });
+    store.getState().press("back");
+    store.getState().press("back");
+    store.getState().press("back");
+    assert.deepEqual([store.getState().logOpen, store.getState().navOpen, store.getState().paused], [false, false, false]);
+    store.getState().press("pause");
+    assert.equal(store.getState().paused, true);
+    store.getState().press("back");
+    assert.equal(store.getState().paused, false);
+    store.getState().press("pause");
+    store.getState().press("go");
+    assert.deepEqual([store.getState().paused, store.getState().autopilot], [false, false]);
+  });
+
+  it("B waves off the First flight offer", () => {
+    const store = createGameStore(NOW);
+    store.getState().press("back");
+    assert.deepEqual([store.getState().offerOpen, store.getState().paused], [false, false]);
+  });
+
+  it("the bumpers step through the nav both ways without flying", () => {
+    const store = createGameStore(NOW);
+    const nav = navIn("sun");
+    const at = nav.findIndex((body) => body.id === store.getState().targetId);
+    store.getState().press("next");
+    assert.equal(store.getState().targetId, nav[(at + 1) % nav.length]!.id);
+    assert.deepEqual(pick(store.getState()), { orbit: false, boost: false, autopilot: false, focus: true });
+    store.getState().press("prev");
+    store.getState().press("prev");
+    assert.equal(store.getState().targetId, nav[(at - 1 + nav.length) % nav.length]!.id);
+  });
+
+  it("steps the cruise, the camera, warp, orbit, and the log", () => {
+    const store = createGameStore(NOW);
+    store.setState({ speed: 0.5 });
+    store.getState().press("faster");
+    assert.equal(store.getState().speed, 0.5 + PAD_SPEED_STEP);
+    store.getState().press("slower");
+    store.getState().press("slower");
+    assert.equal(store.getState().speed, 0.5 - PAD_SPEED_STEP);
+    store.setState({ speed: 1 });
+    store.getState().press("faster");
+    assert.equal(store.getState().speed, 1);
+    store.getState().press("view");
+    assert.equal(store.getState().view, "chase");
+    store.getState().press("boost");
+    assert.equal(store.getState().boost, true);
+    store.getState().press("orbit");
+    assert.deepEqual([store.getState().orbit, store.getState().boost], [true, false]);
+    store.getState().press("log");
+    assert.equal(store.getState().logOpen, true);
   });
 });
 
