@@ -1,4 +1,4 @@
-import { DriftAudio } from "@/components/starfield/audio";
+import { type Cue, DriftAudio } from "@/components/starfield/audio";
 import {
   FAR,
   MAX_STARS,
@@ -162,9 +162,9 @@ export class StarfieldEngine {
     this.raf = requestAnimationFrame(this.frame);
   }
 
-  /** Reward bell. Silent while muted or before the first gesture. */
-  chime(kind: "chart" | "task"): void {
-    this.audio.chime(kind, this.hooks.current.getParams().muted);
+  /** A short sound for something that happened. Silent while muted or before the first gesture. */
+  cue(kind: Cue): void {
+    this.audio.cue(kind, this.hooks.current.getParams().muted);
   }
 
   level(): void {
@@ -188,6 +188,8 @@ export class StarfieldEngine {
 
   enter(chapter: string): void {
     this.chapter = chapter;
+    this.audio.setChapter(chapter);
+    this.cue("chapter");
     const first = bodiesIn(chapter).find((body) => body.goal) ?? bodiesIn(chapter)[0];
     if (!first) return;
     const pos = bodyPosition(first, this.time);
@@ -349,6 +351,29 @@ export class StarfieldEngine {
   };
 
   private prevNow = 0;
+  /** What the last cues heard, so each one sounds once per change. */
+  private heard = { boost: false, orbit: false, locked: false, lockAt: -Infinity };
+
+  /** Boost on and off, settling into an orbit, and the target lock. Called once a frame. */
+  private cueChanges(boosting: boolean, orbiting: boolean, locked: boolean): void {
+    const heard = this.heard;
+    // A gap between on and off, so a boost hovering at the line does not stutter.
+    if (!heard.boost && boosting) {
+      heard.boost = true;
+      this.cue("boost");
+    } else if (heard.boost && this.boost < 0.2 && !boosting) {
+      heard.boost = false;
+      this.cue("unboost");
+    }
+    if (orbiting && !heard.orbit) this.cue("orbit");
+    heard.orbit = orbiting;
+    // The lock comes and goes as you steer near the target; one tick every few seconds at most.
+    if (locked && !heard.locked && !orbiting && this.time - heard.lockAt > 2.5) {
+      heard.lockAt = this.time;
+      this.cue("lock");
+    }
+    heard.locked = locked;
+  }
 
   private step(dt: number, params: StarfieldParams): void {
     if (params.paused) {
@@ -400,6 +425,7 @@ export class StarfieldEngine {
           this.lapTheta = 0;
           this.lapIgnoreBoost = true;
           this.hooks.current.onBeginLap(pass.id);
+          this.cue("lap");
         }
         this.passId = pass.id;
         this.passDist = dist;
@@ -672,6 +698,7 @@ export class StarfieldEngine {
     const aimNow = this.aimStick(params.targetId);
     const aimErr = aimNow ? Math.hypot(aimNow.x, aimNow.y) : 1;
     const locked = aimErr < (params.focus ? 0.22 : 0.16);
+    this.cueChanges(this.boost > 0.4 || autoBoost, orbitOn && !this.lapFor && params.orbit, locked);
     if (warpText !== this.lastWarp || this.frames % 2 === 0) {
       this.lastWarp = warpText;
       this.hooks.current.onFrame({

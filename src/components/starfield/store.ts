@@ -4,6 +4,7 @@
  */
 
 import { createStore, type StoreApi } from "zustand/vanilla";
+import type { Cue } from "./audio.ts";
 import { clamp01 } from "./math.ts";
 import { type LogEntry, type Save, type SaveStorage, SAVE_VERSION, freshSave, writeSave } from "./saves.ts";
 import { bodyById, nextInNav } from "./system.ts";
@@ -199,6 +200,15 @@ export function paramsOf(state: GameState): StarfieldParams {
     // Only this chapter's stations: the others sit on other maps.
     depots: stationsIn(state.depots, state.chapterId),
   };
+}
+
+/** The sound for what just changed in the hold or the stations: a buy, a sale, or a deploy. */
+export function tradeCue(prev: GameState, next: GameState): Cue | null {
+  if (next.depots.length > prev.depots.length) return "station";
+  const held = holdUnits(next.hold) - holdUnits(prev.hold);
+  if (held > 0 && next.credits < prev.credits) return "buy";
+  if (held < 0 && next.credits > prev.credits) return "sell";
+  return null;
 }
 
 /** Writes the save whenever a saved field changes. Returns the unsubscribe. */
