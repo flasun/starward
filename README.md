@@ -155,6 +155,23 @@ npx wrangler d1 execute STARWARD_DB --remote --command "DELETE FROM pilots WHERE
 
 To add a custom domain later, put a `routes` entry with `"custom_domain": true` in `wrangler.jsonc`. The domain has to be a zone in the same Cloudflare account, and Cloudflare then creates the DNS record and certificate on the next deploy.
 
+## Privacy
+
+- **Progress stays in the browser.** The save, settings, the trial's callsign and best, and the trial's pilot key live in `localStorage` (`starward-save`, `starward-trial`).
+- **Gaze runs on the device.** Camera frames go to MediaPipe in the page and never leave it. Turning gaze on downloads MediaPipe's runtime from jsDelivr and its face model from Google's storage; nothing is sent back.
+- **The daily board** (Cloudflare build) keeps each post's callsign and time, and a hash of the browser's pilot key. The network address is used only for rate limiting, as a salted hash that changes daily, and those rows are deleted after a day. With Turnstile on, Cloudflare's bot check runs too.
+- **Logs.** `observability` is on in `wrangler.jsonc`, so Cloudflare keeps the Worker's request logs.
+- **Grok.** The "Created with Grok" pill is a script from grok.com.
+
+## Launch checklist
+
+1. Deploy to Cloudflare: `npm run deploy:cloudflare`, or Workers Builds with the deploy command above. Either one creates the leaderboard tables.
+2. Open `starward.<your-subdomain>.workers.dev`: fly, then open Daily, finish a run, and post it. It should show as #1.
+3. Optional: a Turnstile widget and its keys, and a `TRIAL_SALT` secret (see above).
+4. Optional: a custom domain (`routes` in `wrangler.jsonc`).
+5. Paste the address into a chat app to check the share card (`public/og.jpg`).
+6. Watch the Worker's logs in the Cloudflare dashboard for the first days.
+
 ## Built with Grok
 
 The game was made in Grok App Builder, and some files still belong to that platform:
