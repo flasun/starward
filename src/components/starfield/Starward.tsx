@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { StarfieldEngine, type StarfieldHooks } from "@/components/starfield/engine";
-import { startGaze } from "@/components/starfield/gaze";
 import { Dwell, LongBlink } from "@/components/starfield/handsfree";
 import { type FrameSnap, GameContext, createGameKit } from "@/components/starfield/kit";
 import { Chrome } from "@/components/starfield/panels/Chrome";
@@ -313,22 +312,26 @@ export function Starward() {
     let dead = false;
     const blink = new LongBlink();
     store.setState({ gazeNote: "Starting gaze" });
-    void startGaze({
-      onSample: (x, y) => engineRef.current?.setGaze(x, y, true),
-      onStatus: (text) => {
-        if (!dead) store.setState({ gazeNote: text });
-      },
-      // A long blink is the Go button, or Next on a help card, or the way out of a pause.
-      onEyes: (closed) => {
-        if (!dead && blink.update(closed, performance.now())) store.getState().press("go");
-      },
-      onReady: () => {
-        if (dead) return;
-        store.setState({
-          coach: "Hands-free: hold a world in the sights to pick it. Close your eyes for a moment to Go or Stop. Look well aside to take the controls.",
-        });
-      },
-    })
+    // MediaPipe is a big download, so it loads only when gaze is turned on.
+    void import("@/components/starfield/gaze")
+      .then(({ startGaze }) =>
+        startGaze({
+          onSample: (x, y) => engineRef.current?.setGaze(x, y, true),
+          onStatus: (text) => {
+            if (!dead) store.setState({ gazeNote: text });
+          },
+          // A long blink is the Go button, or Next on a help card, or the way out of a pause.
+          onEyes: (closed) => {
+            if (!dead && blink.update(closed, performance.now())) store.getState().press("go");
+          },
+          onReady: () => {
+            if (dead) return;
+            store.setState({
+              coach: "Hands-free: hold a world in the sights to pick it. Close your eyes for a moment to Go or Stop. Look well aside to take the controls.",
+            });
+          },
+        }),
+      )
       .then((dispose) => {
         if (dead) dispose();
         else stop = dispose;
