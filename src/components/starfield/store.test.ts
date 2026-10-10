@@ -5,6 +5,7 @@ import { LESSONS } from "./lessons.ts";
 import { AWAY_MS, FIRST_FLIGHT, PAD_SPEED_STEP, createGameStore, keepSaved, paramsOf, saveOf, tradeCue } from "./store.ts";
 import { navIn } from "./system.ts";
 import { HOLD_MAX, STATION_LIMIT, priceOf, stationCost } from "./trade.ts";
+import { courseFor } from "./trial.ts";
 
 const NOW = 1_800_000_000_000;
 
@@ -283,6 +284,76 @@ describe("panels", () => {
     assert.deepEqual(store.getState().toasts.map((toast) => toast.title), ["One", "Two"]);
     store.getState().dropToast();
     assert.deepEqual(store.getState().toasts.map((toast) => [toast.title, toast.reward]), [["Two", true]]);
+  });
+});
+
+describe("daily trial", () => {
+  const course = courseFor("2026-10-10");
+
+  it("starts at the first stop, in the Sun's chapter, with nothing flying the ship", () => {
+    const store = createGameStore(NOW);
+    store.setState({ chapterId: "stars", autopilot: true, orbit: true, focus: true, boost: true, trialOpen: true, logOpen: true });
+    store.getState().startTrial(course);
+    const state = store.getState();
+    assert.equal(state.chapterId, "sun");
+    assert.equal(state.targetId, course.stops[0]);
+    assert.deepEqual(pick(state), { orbit: false, boost: false, autopilot: false, focus: false });
+    assert.deepEqual([state.trialOpen, state.logOpen], [false, false]);
+    assert.equal(paramsOf(state).trial, true);
+  });
+
+  it("is flown by hand: Go, orbits and picks wait, boost does not", () => {
+    const store = createGameStore(NOW);
+    store.getState().startTrial(course);
+    const game = store.getState();
+    game.toggleAutopilot();
+    game.flyTo("jupiter");
+    game.pickTarget("jupiter");
+    game.pickOrbit("jupiter", 0);
+    game.toggleOrbit();
+    game.focusOn("jupiter");
+    game.press("go");
+    assert.deepEqual(pick(store.getState()), { orbit: false, boost: false, autopilot: false, focus: false });
+    assert.equal(store.getState().targetId, course.stops[0]);
+    game.toggleBoost();
+    assert.equal(store.getState().boost, true);
+    store.setState({ autopilot: true, orbit: true });
+    assert.deepEqual([paramsOf(store.getState()).autopilot, paramsOf(store.getState()).orbit], [false, false]);
+  });
+
+  it("moves the target stop by stop, then shows the result and keeps the day's best", () => {
+    const store = createGameStore(NOW);
+    const finish = (times: number[]) => {
+      store.getState().startTrial(course);
+      for (const time of times) store.getState().reachStop(time);
+    };
+    finish([10, 20, 30, 40]);
+    assert.equal(store.getState().targetId, course.stops[4]);
+    assert.equal(store.getState().trial?.finished, null);
+    store.getState().reachStop(50);
+    assert.equal(store.getState().trial?.finished, 50);
+    assert.equal(store.getState().trialOpen, true);
+    assert.equal(paramsOf(store.getState()).trial, false);
+    assert.deepEqual(store.getState().trialBest, { day: course.day, time: 50 });
+    finish([10, 20, 30, 40, 60]);
+    assert.deepEqual(store.getState().trialBest, { day: course.day, time: 50 });
+    finish([10, 20, 30, 40, 45]);
+    assert.deepEqual(store.getState().trialBest, { day: course.day, time: 45 });
+    store.getState().startTrial(courseFor("2026-10-11"));
+    for (const time of [1, 2, 3, 4, 70]) store.getState().reachStop(time);
+    assert.deepEqual(store.getState().trialBest, { day: "2026-10-11", time: 70 });
+  });
+
+  it("closes on Escape before anything else, and quits cleanly", () => {
+    const store = createGameStore(NOW);
+    store.getState().openTrial();
+    store.getState().back();
+    assert.deepEqual([store.getState().trialOpen, store.getState().paused], [false, false]);
+    store.getState().startTrial(course);
+    store.getState().quitTrial();
+    assert.equal(store.getState().trial, null);
+    store.getState().toggleAutopilot();
+    assert.equal(store.getState().autopilot, true);
   });
 });
 

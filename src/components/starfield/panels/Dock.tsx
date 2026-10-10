@@ -3,6 +3,7 @@ import * as Slider from "@radix-ui/react-slider";
 import { Volume2, VolumeX } from "lucide-react";
 import { useActions, useGame, useKit, usePainter } from "@/components/starfield/kit";
 import { OrbitLevels } from "@/components/starfield/panels/OrbitLevels";
+import { racing } from "@/components/starfield/store";
 import { type BodyDef, bodyById, goalsIn, navIn, nextInNav } from "@/components/starfield/system";
 import { STATION_LIMIT, stationCost, stationsIn } from "@/components/starfield/trade";
 import type { CameraView } from "@/components/starfield/types";
@@ -36,6 +37,7 @@ function FlightLine() {
   const navOpen = useGame((game) => game.navOpen);
   const moreOpen = useGame((game) => game.moreOpen);
   const autopilot = useGame((game) => game.autopilot);
+  const racingNow = useGame(racing);
   const speed = useGame((game) => game.speed);
   const view = useGame((game) => game.view);
   const aboveSide = useGame((game) => game.aboveSide);
@@ -70,6 +72,7 @@ function FlightLine() {
           className="go-btn"
           aria-pressed={autopilot}
           aria-label={autopilot ? `Stop flying to ${target.name}` : `Fly to ${target.name}`}
+          disabled={racingNow}
           onClick={toggleAutopilot}
         >
           {autopilot ? "Stop" : "Go"}

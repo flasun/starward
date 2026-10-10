@@ -1,6 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { SAVE_KEY, SAVE_VERSION, freshSave, loadSave, parseSave, writeSave, type SaveStorage } from "./saves.ts";
+import {
+  SAVE_KEY,
+  SAVE_VERSION,
+  TRIAL_KEY,
+  freshSave,
+  loadSave,
+  loadTrialPrefs,
+  parseSave,
+  writeSave,
+  writeTrialPrefs,
+  type SaveStorage,
+} from "./saves.ts";
 import { START_CREDITS, STATION_LIMIT } from "./trade.ts";
 
 const NOW = 1_800_000_000_000;
@@ -178,5 +189,26 @@ describe("writeSave", () => {
   it("survives blocked storage", () => {
     assert.doesNotThrow(() => writeSave(blocked, freshSave(NOW)));
     assert.doesNotThrow(() => writeSave(null, freshSave(NOW)));
+  });
+});
+
+describe("trial prefs", () => {
+  const store = (raw: string | null): SaveStorage & { saved: Record<string, string> } => {
+    const saved: Record<string, string> = raw === null ? {} : { [TRIAL_KEY]: raw };
+    return { saved, getItem: (key) => saved[key] ?? null, setItem: (key, value) => void (saved[key] = value) };
+  };
+
+  it("round-trips the callsign, pilot key and best", () => {
+    const storage = store(null);
+    const prefs = { callsign: "Vega", key: "abcdefghijklmnop1234", best: { day: "2026-10-10", time: 61.5 } };
+    writeTrialPrefs(storage, prefs);
+    assert.deepEqual(loadTrialPrefs(storage), prefs);
+  });
+
+  it("starts clean from nothing, junk, or a bad key", () => {
+    const clean = { callsign: "", key: "", best: null };
+    assert.deepEqual(loadTrialPrefs(null), clean);
+    assert.deepEqual(loadTrialPrefs(store("{nope")), clean);
+    assert.deepEqual(loadTrialPrefs(store(JSON.stringify({ key: "x y", best: { day: "today", time: -1 } }))), clean);
   });
 });

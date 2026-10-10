@@ -24,12 +24,21 @@ import {
   stationPay,
   stationsIn,
 } from "./trade.ts";
+import type { Course } from "./trial.ts";
 import type { CameraView, StarfieldParams } from "./types.ts";
 
 /** One message at a time. Rewards hold a little longer than notes. */
 export type Toast = { id: number; title: string; detail?: string; reward: boolean };
 
 export const VIEW_ORDER: readonly CameraView[] = ["cockpit", "chase", "left", "right", "above"];
+
+/** A daily trial run: the stops reached so far, and the time once the last one is. */
+export type TrialRun = { course: Course; splits: number[]; finished: number | null };
+
+/** A trial is under way: flown by hand, so Go, orbits and picks wait until it ends. */
+export function racing(state: Pick<GameState, "trial">): boolean {
+  return state.trial !== null && state.trial.finished === null;
+}
 export const FIRST_FLIGHT = ["earth", "moon", "mars"];
 /** Away this long before station earnings get a welcome-back note. */
 export const AWAY_MS = 60_000;
@@ -80,6 +89,13 @@ export type GameState = {
   coach: string;
   gazeOn: boolean;
   gazeNote: string;
+
+  // The daily trial.
+  trial: TrialRun | null;
+  trialOpen: boolean;
+  /** Today's best on this device. */
+  trialBest: { day: string; time: number } | null;
+  callsign: string;
   toasts: Toast[];
 };
 
@@ -138,6 +154,15 @@ export type GameActions = {
   back(): void;
   /** A gamepad button. */
   press(command: GameCommand): void;
+
+  openTrial(): void;
+  closeTrial(): void;
+  /** Off the line: the engine has placed the ship; everything else waits for the finish. */
+  startTrial(course: Course): void;
+  /** A stop reached, at this many seconds into the run. */
+  reachStop(split: number): void;
+  quitTrial(): void;
+  setCallsign(name: string): void;
 };
 
 export type Game = GameState & GameActions;
@@ -196,15 +221,17 @@ export function paramsOf(state: GameState): StarfieldParams {
     muted: state.muted,
     reducedMotion: state.reducedMotion,
     targetId: state.targetId,
-    autopilot: state.autopilot,
-    focus: state.focus,
-    orbit: state.orbit,
+    // The actions already refuse these during a run; this keeps the engine safe regardless.
+    autopilot: state.autopilot && !racing(state),
+    focus: state.focus && !racing(state),
+    orbit: state.orbit && !racing(state),
     orbitLevel: state.orbitLevel,
     view: state.view,
     aboveSide: state.aboveSide,
     paused: state.paused,
     // Only this chapter's stations: the others sit on other maps.
     depots: stationsIn(state.depots, state.chapterId),
+    trial: racing(state),
   };
 }
 
@@ -271,6 +298,10 @@ export function createGameStore(now = Date.now()): GameStore {
     gazeOn: false,
     gazeNote: "",
     toasts: [],
+    trial: null,
+    trialOpen: false,
+    trialBest: null,
+    callsign: "",
 
     load(save, at) {
       const income = stationPay(payRate(save.trade.depots), save.trade.paid, at);
@@ -314,52 +345,63 @@ export function createGameStore(now = Date.now()): GameStore {
     },
 
     flyTo(id) {
+      if (racing(get())) return;
       set(flying(id));
     },
     pickTarget(id) {
+      if (racing(get())) return;
       set({ targetId: id, orbit: false, autopilot: false, focus: true, navOpen: false });
     },
     sight(id) {
+      if (racing(get())) return;
       set({ targetId: id, orbit: false, autopilot: false, focus: false, navOpen: false });
     },
     orbitAt(id) {
+      if (racing(get())) return;
       set(orbiting(id));
     },
     pickOrbit(id, level) {
+      if (racing(get())) return;
       const { orbit, targetId, orbitLevel } = get();
       if (orbit && targetId === id && orbitLevel === level) set({ orbit: false, autopilot: false });
       else set({ orbitLevel: level, ...joining(id) });
     },
     focusOn(id) {
+      if (racing(get())) return;
       const { targetId, orbit } = get();
       if (targetId === id && orbit) set({ orbit: false, focus: false, autopilot: false });
       else set({ ...flying(id), orbit: true });
     },
     toggleOrbit() {
+      if (racing(get())) return;
       set((state) => (state.orbit ? { orbit: false } : { orbit: true, boost: false, autopilot: false, focus: false }));
     },
     toggleBoost() {
       set((state) => ({ boost: !state.boost, orbit: false }));
     },
     toggleAutopilot() {
+      if (racing(get())) return;
       set((state) => ({ autopilot: !state.autopilot, orbit: false }));
     },
     endLap() {
       set({ orbit: false, boost: true, autopilot: false });
     },
     flyNext() {
+      if (racing(get())) return;
       const { nearId, chapterId } = get();
       const next = nearId ? nextInNav(chapterId, nearId) : undefined;
       if (!next) return;
       set({ ...flying(next.id), dismissed: nearId });
     },
     stepTour() {
+      if (racing(get())) return;
       const { targetId, chapterId, nearId } = get();
       const next = nextInNav(chapterId, targetId);
       if (!next || next.id === targetId) return;
       set({ ...flying(next.id), navOpen: false, ...(nearId ? { dismissed: nearId } : {}) });
     },
     startFirstFlight() {
+      if (racing(get())) return;
       set({
         ...flying(FIRST_FLIGHT[0]!),
         tour: [...FIRST_FLIGHT],
@@ -371,6 +413,7 @@ export function createGameStore(now = Date.now()): GameStore {
       });
     },
     startChapter(first) {
+      if (racing(get())) return;
       set({ ...flying(first), dismissed: "", navOpen: false, mapOpen: false });
     },
 
@@ -433,17 +476,18 @@ export function createGameStore(now = Date.now()): GameStore {
       set((state) => ({ moreOpen: !state.moreOpen, navOpen: false }));
     },
     openHelp() {
-      set({ lesson: 0, logOpen: false });
+      set({ lesson: 0, logOpen: false, trialOpen: false });
     },
     toggleLog() {
-      set((state) => ({ logOpen: !state.logOpen, lesson: null }));
+      set((state) => ({ logOpen: !state.logOpen, lesson: null, trialOpen: false }));
     },
     closeLesson() {
       set({ lesson: null, helpSeen: true });
     },
     back() {
-      const { lesson, logOpen, moreOpen, navOpen, closeLesson } = get();
+      const { lesson, logOpen, moreOpen, navOpen, trialOpen, closeLesson } = get();
       if (lesson !== null) closeLesson();
+      else if (trialOpen) set({ trialOpen: false });
       else if (logOpen) set({ logOpen: false });
       else if (moreOpen) set({ moreOpen: false });
       else if (navOpen) set({ navOpen: false });
@@ -463,7 +507,9 @@ export function createGameStore(now = Date.now()): GameStore {
           return;
         // B closes and resumes, like Escape, but never pauses mid-flight.
         case "back":
-          if (state.lesson !== null || state.logOpen || state.moreOpen || state.navOpen || state.paused) state.back();
+          if (state.lesson !== null || state.trialOpen || state.logOpen || state.moreOpen || state.navOpen || state.paused) {
+            state.back();
+          }
           else if (firstFlightOffered(state)) set({ offerOpen: false });
           return;
         case "pause":
@@ -492,6 +538,54 @@ export function createGameStore(now = Date.now()): GameStore {
           state.toggleLog();
           return;
       }
+    },
+
+    openTrial() {
+      set({ trialOpen: true, logOpen: false, lesson: null, navOpen: false, moreOpen: false });
+    },
+    closeTrial() {
+      set({ trialOpen: false });
+    },
+    startTrial(course) {
+      set({
+        trial: { course, splits: [], finished: null },
+        trialOpen: false,
+        chapterId: "sun",
+        targetId: course.stops[0]!,
+        autopilot: false,
+        orbit: false,
+        focus: false,
+        boost: false,
+        paused: false,
+        tour: null,
+        offerOpen: false,
+        navOpen: false,
+        moreOpen: false,
+        logOpen: false,
+        lesson: null,
+        nearId: "",
+        dismissed: "",
+        coach: "",
+      });
+    },
+    reachStop(split) {
+      const { trial, trialBest } = get();
+      if (!trial || trial.finished !== null) return;
+      const splits = [...trial.splits, split];
+      const next = trial.course.stops[splits.length];
+      if (next) {
+        set({ trial: { ...trial, splits }, targetId: next });
+        return;
+      }
+      const day = trial.course.day;
+      const best = trialBest && trialBest.day === day && trialBest.time <= split ? trialBest : { day, time: split };
+      set({ trial: { ...trial, splits, finished: split }, trialOpen: true, trialBest: best });
+    },
+    quitTrial() {
+      set({ trial: null, trialOpen: false });
+    },
+    setCallsign(name) {
+      set({ callsign: name });
     },
   }));
 }
