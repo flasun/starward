@@ -19,6 +19,8 @@ export type StarfieldParams = {
   aboveSide: -1 | 0 | 1;
   paused: boolean;
   depots: { x: number; z: number }[];
+  /** A daily trial is running: flown by hand, no laps, everyone on the same ship. */
+  trial: boolean;
 };
 
 export type PlotBlip = {
@@ -71,6 +73,9 @@ export type StarfieldHooks = {
     shipZ: number;
     /** With gaze on, the place under the reticle; otherwise empty. */
     sightId: string;
+    /** Game seconds: the clock the system moves by. */
+    time: number;
+    shipY: number;
   }) => void;
   onError: (message: string) => void;
   onCancelAutopilot: () => void;
@@ -95,6 +100,8 @@ declare global {
       setKeys?: (codes: string[]) => void;
       getPitch?: () => number;
       getFps?: () => number;
+      /** Where the target sits from the nose, -1 to 1 each way: what the autopilot steers by. */
+      getAim?: () => { x: number; y: number } | null;
     };
   }
 }

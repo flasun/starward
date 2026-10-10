@@ -13,7 +13,7 @@
     "build:dev": "node scripts/with-app-env.mjs vite build --mode development",
     "build:cloudflare": "node scripts/with-app-env.mjs vite build --mode cloudflare",
     "preview:cloudflare": "npm run build:cloudflare && wrangler dev",
-    "deploy:cloudflare": "npm run build:cloudflare && wrangler deploy",
+    "deploy:cloudflare": "npm run build:cloudflare && wrangler d1 migrations apply STARWARD_DB --remote && wrangler deploy",
     "preview": "node scripts/with-app-env.mjs vite preview",
     "preview:restart": "node scripts/preview.mjs restart",
     "preview:stop": "node scripts/preview.mjs stop",

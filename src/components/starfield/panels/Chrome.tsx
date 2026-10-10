@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useActions, useGame, useKit } from "@/components/starfield/kit";
 import { Brief } from "@/components/starfield/panels/Brief";
+import { TrialStrip } from "@/components/starfield/panels/Trial";
 import { firstFlightOffered } from "@/components/starfield/store";
 
 const TOAST_MS = 2600;
@@ -12,6 +13,7 @@ const HINT_MS = 6400;
 export function Chrome() {
   return (
     <div className="chrome">
+      <TrialStrip />
       <Hint />
       <Status />
       <Toasts />

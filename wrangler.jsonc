@@ -10,5 +10,15 @@
   // Serves at starward.<your-subdomain>.workers.dev. For a custom domain, add
   // "routes": [{ "pattern": "your.domain", "custom_domain": true }].
   "workers_dev": true,
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // The daily trial's leaderboard. Create the tables once with
+  // `npx wrangler d1 migrations apply STARWARD_DB --remote` (the deploy script does it).
+  "d1_databases": [
+    {
+      "binding": "STARWARD_DB",
+      "database_name": "starward",
+      "database_id": "3308c47b-48ba-46a7-aa7e-dcb323589ed2",
+      "migrations_dir": "d1/migrations"
+    }
+  ]
 }

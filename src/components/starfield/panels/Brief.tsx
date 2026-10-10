@@ -1,4 +1,5 @@
 import { useActions, useGame, useKit } from "@/components/starfield/kit";
+import { racing } from "@/components/starfield/store";
 import { OrbitLevels } from "@/components/starfield/panels/OrbitLevels";
 import { bodyById, nextInNav } from "@/components/starfield/system";
 import { GOODS, HOLD_MAX, canDock, holdUnits, priceOf } from "@/components/starfield/trade";
@@ -13,7 +14,9 @@ export function Brief() {
   const orbiting = useGame((game) => game.orbit && game.targetId === game.nearId);
   const credits = useGame((game) => game.credits);
   const hold = useGame((game) => game.hold);
-  if (!nearId || dismissed === nearId) return null;
+  // The trial has the screen: no market mid-race, and nothing over the result.
+  const trialing = useGame((game) => game.trialOpen || racing(game));
+  if (!nearId || dismissed === nearId || trialing) return null;
   const body = bodyById(nearId);
   const next = nextInNav(chapterId, body.id);
   const full = holdUnits(hold) >= HOLD_MAX;

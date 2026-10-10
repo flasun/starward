@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef } from "react";
 import { useStore } from "zustand";
 import type { StarfieldEngine } from "@/components/starfield/engine";
 import { type Game, type GameActions, type GameStore, createGameStore } from "@/components/starfield/store";
+import type { TrialRecorder } from "@/components/starfield/trial";
 import type { StarfieldHooks } from "@/components/starfield/types";
 
 export type FrameSnap = Parameters<StarfieldHooks["onFrame"]>[0];
@@ -17,6 +18,8 @@ export type GameKit = {
   shipAt: { current: { x: number; z: number } };
   /** Each frame calls these. Readouts change every frame, so they skip React and write the DOM. */
   painters: Set<Painter>;
+  /** The daily trial's flight record, while one is flown. Too big and too busy for the store. */
+  trial: { current: TrialRecorder | null };
 };
 
 export function createGameKit(): GameKit {
@@ -26,6 +29,7 @@ export function createGameKit(): GameKit {
     stage: { current: null },
     shipAt: { current: { x: 0, z: 0 } },
     painters: new Set(),
+    trial: { current: null },
   };
 }
 

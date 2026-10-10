@@ -23,6 +23,7 @@ import { createTaskState, stepTasks, type TaskMemory } from "@/components/starfi
 import { captureBand, captureWell, holdRadius, orbitLevelRadius, orbitPace, orbitTangent, skinRadius } from "@/components/starfield/flight";
 import { cameraEye } from "@/components/starfield/camera";
 import { sighted } from "@/components/starfield/handsfree";
+import type { Course } from "@/components/starfield/trial";
 import { FlightInput } from "@/components/starfield/input";
 import { StarfieldRenderer } from "@/components/starfield/renderer";
 import { formatRange, plotSystem } from "@/components/starfield/hud";
@@ -119,6 +120,7 @@ export class StarfieldEngine {
     getSpeed: () => this.speed,
     getPitch: () => this.pitch,
     getFps: () => this.fps,
+    getAim: () => this.aimStick(this.hooks.current.getParams().targetId, true),
     setSteer: (v: number) => {
       this.input.steerOverride = clamp(v, -1, 1);
     },
@@ -218,6 +220,34 @@ export class StarfieldEngine {
     this.pitch = -0.04;
     this.speed = 56;
     this.boost = 1;
+    this.clearFlight();
+  }
+
+  /**
+   * The daily trial: the system set to the course's moment, the ship at its start, still and
+   * facing the first stop.
+   */
+  startTrial(course: Course): void {
+    if (this.chapter !== "sun") {
+      this.chapter = "sun";
+      this.audio.setChapter("sun");
+    }
+    this.time = course.epoch;
+    this.shipX = course.start.x;
+    this.shipY = course.start.y;
+    this.shipZ = course.start.z;
+    this.yaw = course.yaw;
+    this.pitch = 0;
+    this.speed = 0;
+    this.boost = 0;
+    this.leveling = false;
+    this.lapSkip = "";
+    this.input.engaged = true;
+    this.clearFlight();
+  }
+
+  /** Forget the flight so far: trail, orbit, capture, and any lap. */
+  private clearFlight(): void {
     this.velX = 0;
     this.velY = 0;
     this.velZ = 0;
@@ -418,7 +448,7 @@ export class StarfieldEngine {
     if (!params.orbit) this.lapRelease = false;
     const lapCancelled = this.lapFor !== "" && this.lapConfirmed && !params.orbit;
     if (lapCancelled) this.clearLap(true);
-    if (!manual && !params.orbit && !this.lapFor && params.boost) {
+    if (!manual && !params.orbit && !this.lapFor && params.boost && !params.trial) {
       const pass = this.nearestPass(4);
       if (pass) {
         const dist = this.rangeTo(pass.id);
@@ -478,8 +508,10 @@ export class StarfieldEngine {
     this.stickX = sx;
     this.stickY = sy;
 
-    const yawSpeed = params.reducedMotion ? 0.55 : 1.25;
-    const pitchSpeed = params.reducedMotion ? 0.4 : 0.85;
+    // A trial is a race, so everyone flies the same ship; reduced motion keeps its calmer camera.
+    const flightReduced = params.reducedMotion && !params.trial;
+    const yawSpeed = flightReduced ? 0.55 : 1.25;
+    const pitchSpeed = flightReduced ? 0.4 : 0.85;
     const yawRate = -sx * yawSpeed;
     const pitchRate = -sy * pitchSpeed;
 
@@ -508,7 +540,7 @@ export class StarfieldEngine {
     const bk = boostTarget > this.boost ? 5 : 2.5;
     this.boost += (boostTarget - this.boost) * (1 - Math.exp(-bk * dt));
 
-    const cruise = cruiseSpeed(params.speed, params.reducedMotion);
+    const cruise = cruiseSpeed(params.speed, params.reducedMotion && !params.trial);
     let targetSpeed = cruise * (1 + this.boost * 3.8);
     let orbitDir: { x: number; y: number; z: number } | null = null;
     let coasted = false;
@@ -731,6 +763,8 @@ export class StarfieldEngine {
         shipX: this.shipX,
         shipZ: this.shipZ,
         sightId: this.input.gazing ? sighted(this.picks, this.aspect, (id) => bodyById(id).nav) : "",
+        time: this.time,
+        shipY: this.shipY,
       });
     }
   }

@@ -11,10 +11,12 @@ import { Lesson } from "@/components/starfield/panels/Lesson";
 import { Markers } from "@/components/starfield/panels/Markers";
 import { Plot } from "@/components/starfield/panels/Plot";
 import { TopBar } from "@/components/starfield/panels/TopBar";
-import { browserStorage, loadSave, writeSave } from "@/components/starfield/saves";
-import { keepSaved, paramsOf, saveOf, tradeCue } from "@/components/starfield/store";
+import { TrialPanel } from "@/components/starfield/panels/Trial";
+import { browserStorage, loadSave, loadTrialPrefs, writeSave, writeTrialPrefs } from "@/components/starfield/saves";
+import { keepSaved, paramsOf, racing, saveOf, tradeCue } from "@/components/starfield/store";
 import { bodyById, chapterById, chapterOpen, goalsIn, isChartable } from "@/components/starfield/system";
 import { TASKS } from "@/components/starfield/tasks";
+import { TRIAL_LIMIT } from "@/components/starfield/trial";
 
 /**
  * The game: runs the engine, loads and saves progress, and turns what each frame reports into
@@ -22,7 +24,7 @@ import { TASKS } from "@/components/starfield/tasks";
  */
 export function Starward() {
   const [kit] = useState(createGameKit);
-  const { store, engine: engineRef, stage: stageRef, shipAt, painters } = kit;
+  const { store, engine: engineRef, stage: stageRef, shipAt, painters, trial: recorderRef } = kit;
   const chapterId = useStore(store, (game) => game.chapterId);
   const stations = useStore(store, (game) => game.depots.length);
   const gazeOn = useStore(store, (game) => game.gazeOn);
@@ -122,6 +124,24 @@ export function Starward() {
       store.setState({ alert: snap.alert });
     }
     if (stage) holdSights(stage, snap.sightId);
+    flyTrial(snap);
+  }
+
+  /** The daily trial: record the flight, and call each stop as the ship reaches it. */
+  function flyTrial(snap: FrameSnap) {
+    const run = store.getState().trial;
+    const recorder = recorderRef.current;
+    if (!run || run.finished !== null || !recorder) return;
+    const t = snap.time - run.course.epoch;
+    if (t > TRIAL_LIMIT) {
+      store.getState().quitTrial();
+      store.getState().notify("Trial over", "Past 15 minutes. Today's course is still open.");
+      return;
+    }
+    const split = recorder.frame(t, { x: snap.shipX, y: snap.shipY, z: snap.shipZ });
+    if (split === null) return;
+    store.getState().reachStop(split);
+    engineRef.current?.cue(recorder.done ? "task" : "chart");
   }
 
   /**
@@ -211,7 +231,18 @@ export function Starward() {
       store.setState({ targetId: id, focus: true, autopilot: true });
     }
     writeSave(storage, saveOf(store.getState()));
-    return keepSaved(store, storage);
+    // The trial's own key: written only once the player races or names themselves.
+    const prefs = loadTrialPrefs(storage);
+    store.setState({ callsign: prefs.callsign, trialBest: prefs.best });
+    const stopTrialPrefs = store.subscribe((next, prev) => {
+      if (next.callsign === prev.callsign && next.trialBest === prev.trialBest) return;
+      writeTrialPrefs(storage, { ...loadTrialPrefs(storage), callsign: next.callsign, best: next.trialBest });
+    });
+    const stopSaving = keepSaved(store, storage);
+    return () => {
+      stopTrialPrefs();
+      stopSaving();
+    };
   }, [store]);
 
   // After the load above, so loading a save makes no sound.
@@ -237,6 +268,8 @@ export function Starward() {
       chapterBoot.current = false;
       if (chapterId === "sun") return;
     }
+    // A trial places the ship itself.
+    if (racing(store.getState())) return;
     const linked = linkedTarget.current;
     linkedTarget.current = null;
     const linkedHere = linked && (bodyById(linked).chapter ?? "sun") === chapterId;
@@ -346,6 +379,7 @@ export function Starward() {
           {error ? <p className="field-error">{error}</p> : null}
           <Lesson />
           <FlightLog />
+          <TrialPanel />
           <Chrome />
         </div>
         <Dock />

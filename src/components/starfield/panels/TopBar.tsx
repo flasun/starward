@@ -83,7 +83,8 @@ function ChapterLine() {
 
 function TopActions() {
   const { store } = useKit();
-  const { openHelp, toggleLog } = useActions();
+  const { openHelp, toggleLog, openTrial, closeTrial } = useActions();
+  const trialOpen = useGame((game) => game.trialOpen);
   const chapterId = useGame((game) => game.chapterId);
   const ready = useGame((game) => chapterDone(game.chapterId, game.charted));
   const logOpen = useGame((game) => game.logOpen);
@@ -101,6 +102,9 @@ function TopActions() {
       </button>
       <button type="button" className="help-btn" data-hud aria-pressed={logOpen} onClick={toggleLog}>
         Log
+      </button>
+      <button type="button" className="help-btn" data-hud aria-pressed={trialOpen} onClick={trialOpen ? closeTrial : openTrial}>
+        Daily
       </button>
     </div>
   );

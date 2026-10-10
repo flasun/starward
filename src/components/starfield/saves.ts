@@ -202,3 +202,36 @@ function readTrade(value: unknown, now: number): Save["trade"] {
   if (isNumber(value.paid)) trade.paid = value.paid;
   return trade;
 }
+
+/**
+ * The daily trial keeps its own key, written only once a player races: the callsign, this
+ * browser's pilot key (which owns that callsign on the board), and today's best.
+ */
+export const TRIAL_KEY = "starward-trial";
+
+export type TrialPrefs = { callsign: string; key: string; best: { day: string; time: number } | null };
+
+export function loadTrialPrefs(storage: SaveStorage | null): TrialPrefs {
+  const prefs: TrialPrefs = { callsign: "", key: "", best: null };
+  try {
+    const value = parseJson(storage?.getItem(TRIAL_KEY) ?? null);
+    if (!isRecord(value)) return prefs;
+    if (typeof value.callsign === "string") prefs.callsign = value.callsign.slice(0, 40);
+    if (typeof value.key === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(value.key)) prefs.key = value.key;
+    const best = value.best;
+    if (isRecord(best) && typeof best.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(best.day) && isNumber(best.time) && best.time > 0) {
+      prefs.best = { day: best.day, time: best.time };
+    }
+  } catch {
+    /* blocked storage: start clean */
+  }
+  return prefs;
+}
+
+export function writeTrialPrefs(storage: SaveStorage | null, prefs: TrialPrefs): void {
+  try {
+    storage?.setItem(TRIAL_KEY, JSON.stringify(prefs));
+  } catch {
+    /* full or blocked: the trial still flies */
+  }
+}
