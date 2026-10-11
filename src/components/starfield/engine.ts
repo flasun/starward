@@ -224,13 +224,13 @@ export class StarfieldEngine {
   }
 
   /**
-   * The daily trial: the system set to the course's moment, the ship at its start, still and
-   * facing the first stop.
+   * The daily trial: the course's chapter, set to the course's moment, with the ship at its start,
+   * still and facing the first stop.
    */
   startTrial(course: Course): void {
-    if (this.chapter !== "sun") {
-      this.chapter = "sun";
-      this.audio.setChapter("sun");
+    if (this.chapter !== course.chapter) {
+      this.chapter = course.chapter;
+      this.audio.setChapter(course.chapter);
     }
     this.time = course.epoch;
     this.shipX = course.start.x;

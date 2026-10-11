@@ -4,7 +4,7 @@ import { useActions, useGame, useKit, usePainter } from "@/components/starfield/
 import { getBoard, postRun } from "@/components/starfield/leaderboard";
 import { browserStorage, loadTrialPrefs, writeTrialPrefs } from "@/components/starfield/saves";
 import { racing } from "@/components/starfield/store";
-import { bodyById } from "@/components/starfield/system";
+import { bodyById, chapterById } from "@/components/starfield/system";
 import { TURNSTILE_ACTION, TrialRecorder, courseFor, dayOf, formatTime } from "@/components/starfield/trial";
 
 declare global {
@@ -110,7 +110,7 @@ export function TrialPanel() {
       <div className="brief-top">
         <div>
           <p className="lesson-kicker">Daily trial · {day}</p>
-          <h2>{finished === null ? "Five worlds, by hand" : formatTime(finished)}</h2>
+          <h2>{finished === null ? (course.chapter === "sun" ? "Five worlds, by hand" : "Five places, by hand") : formatTime(finished)}</h2>
         </div>
         <button type="button" className="brief-close" onClick={finished === null ? closeTrial : quitTrial}>
           Close
@@ -125,7 +125,8 @@ export function TrialPanel() {
               ))}
             </ol>
             <p className="more-note">
-              Reach each world in order. Go and orbits wait until the finish; Space boosts. The same course for everyone, all day (UTC).
+              Today&apos;s course is in {chapterById(course.chapter).name}. Reach each place in order. Go and orbits wait until the
+              finish; Space boosts. The same course for everyone, all day (UTC), and a different chapter each weekday.
             </p>
           </>
         ) : (

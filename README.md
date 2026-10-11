@@ -7,7 +7,7 @@ Fly a real solar system, then the near stars, the Milky Way, the galaxy clusters
 - **Six chapters:** Round the Sun, The Near Stars, The Milky Way, Out of the Galaxy, The Web, and The Edge of Sight. Chart every place in a chapter to open the next one; a chapter stays open once you have charted anything in it.
 - **Real places.** Sizes and orbital periods are real. Distances are compressed so a flight can cross them.
 - **Flight log.** Thirty-five challenges, a set for every chapter: an eclipse and a ring cut round the Sun, the gap between Proxima and Alpha Centauri, a skim over a black hole, a postcard of home from beyond Andromeda, a lap round a galaxy cluster, a straight run through the Boötes Void, and a look back from the oldest light there is. Each is logged with your time.
-- **Daily trial.** One course a day for everyone: five worlds round the Sun, flown by hand against the clock. Post your time to the day's board under a callsign. The board runs on the Cloudflare build; anywhere else the trial still flies and keeps your best on the device.
+- **Daily trial.** One course a day for everyone: five places, flown by hand against the clock, in a different chapter each weekday (Monday the near stars, through to Friday at the edge of sight; weekends round the Sun). A trial can fly a chapter you have not reached yet, but charts nothing there. Post your time to the day's board under a callsign. The board runs on the Cloudflare build; anywhere else the trial still flies and keeps your best on the device.
 - **Trade and stations.** Every place you can chart has a market: buy goods where they are cheap and sell where they are dear. Every chapter's open space takes stations that pay while you fly. Prices, station costs, and station pay rise chapter by chapter.
 - **Cameras and steering.** Cockpit, chase, either wing, and overhead views. Three orbit heights, autopilot, gamepads, and optional hands-free flying by gaze, which runs on the device (MediaPipe).
 - **No account.** Progress saves in the browser, in one versioned `starward-save` entry. The trial keeps its callsign, best, and pilot key in `starward-trial`.
@@ -133,6 +133,8 @@ The board lives in the D1 database `starward`, bound as `STARWARD_DB` in `wrangl
 - Locally, `npx wrangler d1 migrations apply STARWARD_DB --local`, then `npm run preview:cloudflare`. `npm run dev` keeps a board in memory instead.
 
 How a post is checked: the client records the flight (position every 0.2 game seconds) and the server scores that record with the same code the client uses (`scoreTrace` in `trial.ts`). It has to start at the course start, never fly faster or turn harder than the ship can, and reach every stop in order; the posted time is the server's. A callsign belongs to the browser that first posted with it. Posts are limited to 20 per network per 10 minutes. None of this stops a determined cheat; sign-in can come later without losing the board.
+
+The course comes from the day and the map, so a deploy that changes places or the course rules also changes that day's course: a run flown on the old page and posted after the deploy is refused. Deploy close to midnight UTC to keep that window small.
 
 `TRIAL_SALT` (a secret, optional) salts the daily network hashes kept for rate limiting.
 

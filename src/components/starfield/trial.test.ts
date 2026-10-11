@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { bodyById, bodyPosition } from "./system.ts";
 import {
+  COURSE_LENGTHS,
   type Course,
   type Sample,
   SAMPLE_GAP,
@@ -14,6 +15,7 @@ import {
   sample,
   scoreTrace,
   stopRadius,
+  trialChapter,
 } from "./trial.ts";
 
 const DAY = "2026-10-10";
@@ -38,7 +40,8 @@ function fly(course: Course, pace = 0.9, every = 2): TrialRecorder {
     if (turn < -Math.PI) turn += 2 * Math.PI;
     heading += Math.max(-1.25 * 0.05, Math.min(1.25 * 0.05, turn));
     const speed = Math.min(TRIAL_MAX_SPEED * pace, Math.max(12, len * 0.45));
-    const y = pos.y + Math.max(-2, Math.min(2, goal.y - pos.y));
+    // The ship flies within 90 units of the plane.
+    const y = Math.max(-90, Math.min(90, pos.y + Math.max(-2, Math.min(2, goal.y - pos.y))));
     pos = { x: pos.x + Math.sin(heading) * speed * 0.05, y, z: pos.z + Math.cos(heading) * speed * 0.05 };
     if (frame % every === 0) recorder.frame(Math.round(t * 1000) / 1000, pos);
   }
@@ -51,10 +54,12 @@ describe("courseFor", () => {
     assert.notDeepEqual(courseFor(DAY).stops, courseFor("2026-10-11").stops);
   });
 
-  it("picks five different worlds, never two of one family in a row, at a fair length", () => {
+  it("picks five different places, never two of one family in a row, at a fair length", () => {
     for (let i = 0; i < 400; i++) {
       const day = dayOf(Date.UTC(2026, 0, 1) + i * 86_400_000);
       const course = courseFor(day);
+      assert.equal(course.chapter, trialChapter(day));
+      assert.ok(course.stops.every((id) => (bodyById(id).chapter ?? "sun") === course.chapter), day);
       assert.equal(course.stops.length, 5, day);
       assert.equal(new Set(course.stops).size, 5, day);
       const at = (id: string) => bodyPosition(bodyById(id), course.epoch);
@@ -67,10 +72,28 @@ describe("courseFor", () => {
         const pb = at(b.id);
         length += Math.hypot(pa.x - pb.x, pa.z - pb.z);
       }
-      assert.ok(length > 1300 && length < 3600, `${day} length ${length}`);
+      const [shortest, longest] = COURSE_LENGTHS[course.chapter]!;
+      assert.ok(length > shortest && length < longest, `${day} ${course.chapter} length ${length}`);
       const first = at(course.stops[0]!);
-      assert.ok(Math.abs(Math.hypot(course.start.x - first.x, course.start.z - first.z) - 420) < 1, day);
-      assert.ok(Math.hypot(course.start.x, course.start.z) > 250, `${day} starts in the Sun's glare`);
+      const away = Math.max(420, stopRadius(course.stops[0]!) + 160);
+      assert.ok(Math.abs(Math.hypot(course.start.x - first.x, course.start.z - first.z) - away) < 1, day);
+      if (course.chapter === "sun") assert.ok(Math.hypot(course.start.x, course.start.z) > 250, `${day} starts in the Sun's glare`);
+    }
+  });
+
+  it("flies a different chapter each weekday, and the weekend round the Sun", () => {
+    // 2026-10-11 is a Sunday.
+    const week = Array.from({ length: 7 }, (_, i) => trialChapter(dayOf(Date.UTC(2026, 9, 11 + i))));
+    assert.deepEqual(week, ["sun", "stars", "galaxy", "local", "web", "deep", "sun"]);
+  });
+
+  it("gives every chapter's courses a flight the ship can make and the server scores", () => {
+    for (let i = 0; i < 28; i++) {
+      const course = courseFor(dayOf(Date.UTC(2026, 9, 11 + i)));
+      const run = fly(course);
+      assert.equal(run.done, true, `${course.day} ${course.chapter} unfinished`);
+      const score = scoreTrace(course, run.trace);
+      assert.deepEqual(score, { ok: true, time: run.splits.at(-1), splits: run.splits }, `${course.day} ${course.chapter}`);
     }
   });
 
