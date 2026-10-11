@@ -60,27 +60,13 @@ export const postRun = createServerFn({ method: "POST" })
     const store = await boardStore();
     if (!store) return { ok: false, reason: "The leaderboard is not running on this site." };
     const { getRequestHeader, getRequestIP } = await import("@tanstack/react-start/server");
-    const ip = getRequestHeader("cf-connecting-ip") ?? getRequestIP({ xForwardedFor: true }) ?? "unknown";
+    const ip = getRequestHeader("cf-connecting-ip") ?? getRequestIP({ xForwardedFor: true }) ?? null;
     const { TURNSTILE_SECRET, TRIAL_SALT } = env();
-    if (siteKey() && TURNSTILE_SECRET && !(await turnstile(TURNSTILE_SECRET, data.turnstile ?? "", ip))) {
+    const { digest, submitRun, verifyTurnstile } = await import("@/components/starfield/board");
+    if (siteKey() && TURNSTILE_SECRET && !(await verifyTurnstile(TURNSTILE_SECRET, data.turnstile ?? "", ip))) {
       return { ok: false, reason: "The bot check did not pass. Try again." };
     }
-    const { digest, submitRun } = await import("@/components/starfield/board");
     const now = Date.now();
-    const network = await digest(`${TRIAL_SALT ?? "starward"}:${new Date(now).toISOString().slice(0, 10)}:${ip}`);
+    const network = await digest(`${TRIAL_SALT ?? "starward"}:${new Date(now).toISOString().slice(0, 10)}:${ip ?? "unknown"}`);
     return submitRun(store, data, now, network);
   });
-
-async function turnstile(secret: string, token: string, ip: string): Promise<boolean> {
-  if (!token) return false;
-  try {
-    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      body: new URLSearchParams({ secret, response: token, remoteip: ip }),
-    });
-    const result = (await response.json()) as { success?: boolean };
-    return result.success === true;
-  } catch {
-    return false;
-  }
-}

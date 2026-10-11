@@ -41,6 +41,9 @@ const STOP_COUNT = 5;
 const START_DISTANCE = 420;
 const START_HEIGHT = 6;
 
+/** The action the bot check names, so a token made for another form on the site does not count. */
+export const TURNSTILE_ACTION = "trial-post";
+
 /** The UTC day for a time. */
 export function dayOf(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
