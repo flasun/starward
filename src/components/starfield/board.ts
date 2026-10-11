@@ -4,7 +4,7 @@
  * no framework imports, so it runs under the unit tests as is.
  */
 
-import { type Sample, courseFor, dayOf, scoreTrace } from "./trial.ts";
+import { type Sample, TURNSTILE_ACTION, courseFor, dayOf, scoreTrace } from "./trial.ts";
 
 export type BoardEntry = { callsign: string; time: number };
 export type BoardView = { available: boolean; day: string; top: BoardEntry[]; total: number; siteKey: string | null };
@@ -59,6 +59,36 @@ export type PostInput = { day: string; callsign: string; key: string; trace: Sam
 export async function digest(text: string): Promise<string> {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+
+/** Just enough of fetch for Turnstile, so the tests can stand in for Cloudflare. */
+export type Fetcher = (url: string, init: { method: "POST"; body: URLSearchParams; signal: AbortSignal }) => Promise<{ json(): Promise<unknown> }>;
+
+/**
+ * Asks Cloudflare whether a bot-check token is good. It fails closed: no token, a refusal, a
+ * token made for another action, an error, or no answer in time all say no. A token works once,
+ * so the client needs a fresh one for every post.
+ */
+export async function verifyTurnstile(
+  secret: string,
+  token: string,
+  ip: string | null,
+  send: Fetcher = fetch,
+  waitMs = 5000,
+): Promise<boolean> {
+  if (!token) return false;
+  const body = new URLSearchParams({ secret, response: token });
+  if (ip) body.set("remoteip", ip);
+  try {
+    const response = await send(SITEVERIFY, { method: "POST", body, signal: AbortSignal.timeout(waitMs) });
+    const result = (await response.json()) as { success?: unknown; action?: unknown };
+    // Cloudflare's test keys answer without an action; real widgets always name one.
+    return result.success === true && (result.action === undefined || result.action === TURNSTILE_ACTION);
+  } catch {
+    return false;
+  }
 }
 
 const entries = (rows: { callsign: string; timeMs: number }[]): BoardEntry[] =>

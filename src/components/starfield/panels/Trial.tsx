@@ -4,8 +4,8 @@ import { useActions, useGame, useKit, usePainter } from "@/components/starfield/
 import { getBoard, postRun } from "@/components/starfield/leaderboard";
 import { browserStorage, loadTrialPrefs, writeTrialPrefs } from "@/components/starfield/saves";
 import { racing } from "@/components/starfield/store";
-import { bodyById } from "@/components/starfield/system";
-import { TrialRecorder, courseFor, dayOf, formatTime } from "@/components/starfield/trial";
+import { bodyById, chapterById } from "@/components/starfield/system";
+import { TURNSTILE_ACTION, TrialRecorder, courseFor, dayOf, formatTime } from "@/components/starfield/trial";
 
 declare global {
   interface Window {
@@ -56,6 +56,9 @@ export function TrialPanel() {
   const [posted, setPosted] = useState<PostResult | null>(null);
   const [posting, setPosting] = useState(false);
   const [token, setToken] = useState("");
+  /** A bot-check token works once: each post gets a fresh check. */
+  const [check, setCheck] = useState(0);
+  const [checkFailed, setCheckFailed] = useState(false);
   const finished = run?.finished ?? null;
 
   useEffect(() => {
@@ -98,6 +101,7 @@ export function TrialPanel() {
     } finally {
       setPosting(false);
       setToken("");
+      setCheck((n) => n + 1);
     }
   }
 
@@ -106,7 +110,7 @@ export function TrialPanel() {
       <div className="brief-top">
         <div>
           <p className="lesson-kicker">Daily trial · {day}</p>
-          <h2>{finished === null ? "Five worlds, by hand" : formatTime(finished)}</h2>
+          <h2>{finished === null ? (course.chapter === "sun" ? "Five worlds, by hand" : "Five places, by hand") : formatTime(finished)}</h2>
         </div>
         <button type="button" className="brief-close" onClick={finished === null ? closeTrial : quitTrial}>
           Close
@@ -121,7 +125,8 @@ export function TrialPanel() {
               ))}
             </ol>
             <p className="more-note">
-              Reach each world in order. Go and orbits wait until the finish; Space boosts. The same course for everyone, all day (UTC).
+              Today&apos;s course is in {chapterById(course.chapter).name}. Reach each place in order. Go and orbits wait until the
+              finish; Space boosts. The same course for everyone, all day (UTC), and a different chapter each weekday.
             </p>
           </>
         ) : (
@@ -148,7 +153,7 @@ export function TrialPanel() {
             }}
           >
             <label htmlFor="trial-callsign">Callsign</label>
-            <div>
+            <div className="trial-row">
               <input
                 id="trial-callsign"
                 value={callsign}
@@ -159,10 +164,36 @@ export function TrialPanel() {
                 onChange={(event) => setCallsign(event.target.value)}
               />
               <button type="submit" disabled={posting || callsign.trim().length < 3 || (needsCheck && !token)}>
-                {posting ? "Posting" : "Post"}
+                {posting ? "Posting" : needsCheck && !token ? "Checking" : "Post"}
               </button>
             </div>
-            {needsCheck && board?.siteKey ? <Turnstile siteKey={board.siteKey} onToken={setToken} /> : null}
+            {needsCheck && board?.siteKey ? (
+              <Turnstile
+                key={check}
+                siteKey={board.siteKey}
+                onToken={(next) => {
+                  setToken(next);
+                  if (next) setCheckFailed(false);
+                }}
+                onError={() => setCheckFailed(true)}
+              />
+            ) : null}
+            {checkFailed && !token ? (
+              <p className="trial-note" role="alert">
+                The bot check could not run. Let this site reach challenges.cloudflare.com, then{" "}
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => {
+                    setCheckFailed(false);
+                    setCheck((n) => n + 1);
+                  }}
+                >
+                  try again
+                </button>
+                .
+              </p>
+            ) : null}
             <p className="more-note">Posting puts your callsign and time on today&apos;s board. Nothing else about you is kept.</p>
           </form>
         ) : null}
@@ -254,11 +285,14 @@ export function TrialStrip() {
   );
 }
 
-/** Cloudflare Turnstile, loaded only when the board asks for it. */
-function Turnstile({ siteKey, onToken }: { siteKey: string; onToken: (token: string) => void }) {
+/**
+ * Cloudflare Turnstile, loaded only when the board asks for it. It stays out of sight unless
+ * Cloudflare wants a click, and renews its token by itself when one expires.
+ */
+function Turnstile({ siteKey, onToken, onError }: { siteKey: string; onToken: (token: string) => void; onError: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
-  const tokenRef = useRef(onToken);
-  tokenRef.current = onToken;
+  const handlers = useRef({ onToken, onError });
+  handlers.current = { onToken, onError };
 
   useEffect(() => {
     let id: string | undefined;
@@ -267,26 +301,46 @@ function Turnstile({ siteKey, onToken }: { siteKey: string; onToken: (token: str
       if (dead || !ref.current || !window.turnstile || id) return;
       id = window.turnstile.render(ref.current, {
         sitekey: siteKey,
+        action: TURNSTILE_ACTION,
         theme: "dark",
-        size: "flexible",
-        callback: (token: string) => tokenRef.current(token),
-        "expired-callback": () => tokenRef.current(""),
+        // The flexible widget needs 300px; the panel is narrower on most screens.
+        size: ref.current.clientWidth < 300 ? "compact" : "flexible",
+        appearance: "interaction-only",
+        callback: (token: string) => handlers.current.onToken(token),
+        "expired-callback": () => handlers.current.onToken(""),
+        "timeout-callback": () => handlers.current.onToken(""),
+        "error-callback": () => {
+          handlers.current.onToken("");
+          handlers.current.onError();
+        },
       });
     };
+    const failed = () => !dead && handlers.current.onError();
+    // When Cloudflare wants a click the box opens up: bring it into view in the scrolling panel.
+    const opened = new ResizeObserver(([entry]) => {
+      if (entry && entry.contentRect.height > 30) ref.current?.scrollIntoView({ block: "nearest" });
+    });
+    if (ref.current) opened.observe(ref.current);
+    let script = document.querySelector<HTMLScriptElement>("script[data-turnstile]");
     if (window.turnstile) render();
     else {
-      let script = document.querySelector<HTMLScriptElement>("script[data-turnstile]");
       if (!script) {
         script = document.createElement("script");
         script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
         script.async = true;
         script.dataset.turnstile = "";
+        // A script that failed goes, so the next try loads it again.
+        script.addEventListener("error", () => script?.remove(), { once: true });
         document.head.appendChild(script);
       }
       script.addEventListener("load", render, { once: true });
+      script.addEventListener("error", failed, { once: true });
     }
     return () => {
       dead = true;
+      opened.disconnect();
+      script?.removeEventListener("load", render);
+      script?.removeEventListener("error", failed);
       if (id && window.turnstile) window.turnstile.remove(id);
     };
   }, [siteKey]);

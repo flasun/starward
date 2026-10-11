@@ -32,6 +32,7 @@ export const PADS: Record<string, readonly number[]> = {
   galaxy: [98, 146.83, 196, 233.08],
   local: [87.31, 130.81, 174.61, 196],
   web: [73.42, 110, 164.81, 174.61],
+  deep: [65.41, 98, 146.83, 155.56],
 };
 /** The ambience sits well under the drone and the cues. */
 const PAD_LEVEL = 0.05;

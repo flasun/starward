@@ -19,6 +19,7 @@ export function TopBar() {
 
 function ChapterLine() {
   const { store } = useKit();
+  const { goToChapter } = useActions();
   const chapterId = useGame((game) => game.chapterId);
   const charted = useGame((game) => game.charted);
   const stations = useGame((game) => stationsIn(game.depots, game.chapterId).length);
@@ -65,9 +66,10 @@ function ChapterLine() {
                   type="button"
                   disabled={!open}
                   aria-current={item.id === chapterId ? "true" : undefined}
-                  onClick={() =>
-                    store.setState(open && item.id !== chapterId ? { mapOpen: false, chapterId: item.id } : { mapOpen: false })
-                  }
+                  onClick={() => {
+                    store.setState({ mapOpen: false });
+                    goToChapter(item.id);
+                  }}
                 >
                   {item.name}
                   <span>{!open ? "Locked" : chapterDone(item.id, charted) ? "Charted" : "Open"}</span>
@@ -82,8 +84,7 @@ function ChapterLine() {
 }
 
 function TopActions() {
-  const { store } = useKit();
-  const { openHelp, toggleLog, openTrial, closeTrial } = useActions();
+  const { openHelp, toggleLog, openTrial, closeTrial, goToChapter } = useActions();
   const trialOpen = useGame((game) => game.trialOpen);
   const chapterId = useGame((game) => game.chapterId);
   const ready = useGame((game) => chapterDone(game.chapterId, game.charted));
@@ -93,7 +94,7 @@ function TopActions() {
   return (
     <div className="top-actions">
       {next && ready ? (
-        <button type="button" className="onward" onClick={() => store.setState({ chapterId: next })}>
+        <button type="button" className="onward" onClick={() => goToChapter(next)}>
           Onward
         </button>
       ) : null}

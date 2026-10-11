@@ -2,9 +2,19 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { type BoardStore, type D1Like, cleanCallsign, d1Store, memoryStore, readBoard, submitRun } from "./board.ts";
+import {
+  type BoardStore,
+  type D1Like,
+  type Fetcher,
+  cleanCallsign,
+  d1Store,
+  memoryStore,
+  readBoard,
+  submitRun,
+  verifyTurnstile,
+} from "./board.ts";
 import { bodyById, bodyPosition } from "./system.ts";
-import { type Course, type Sample, TRIAL_MAX_SPEED, TrialRecorder, courseFor } from "./trial.ts";
+import { type Course, type Sample, TRIAL_MAX_SPEED, TURNSTILE_ACTION, TrialRecorder, courseFor } from "./trial.ts";
 
 const NOW = Date.UTC(2026, 9, 10, 12);
 const DAY = "2026-10-10";
@@ -113,3 +123,49 @@ for (const [name, make] of [
     });
   });
 }
+
+describe("verifyTurnstile", () => {
+  const answer =
+    (result: unknown, seen: URLSearchParams[] = []): Fetcher =>
+    async (_url, init) => {
+      seen.push(init.body);
+      return { json: async () => result };
+    };
+
+  it("passes a good token for the trial's action, and sends the network when known", async () => {
+    const seen: URLSearchParams[] = [];
+    assert.equal(await verifyTurnstile("secret", "token", "203.0.113.9", answer({ success: true, action: TURNSTILE_ACTION }, seen)), true);
+    assert.equal(seen[0]!.get("response"), "token");
+    assert.equal(seen[0]!.get("remoteip"), "203.0.113.9");
+    await verifyTurnstile("secret", "token", null, answer({ success: true }, seen));
+    assert.equal(seen[1]!.has("remoteip"), false);
+  });
+
+  it("accepts Cloudflare's test keys, which answer without an action", async () => {
+    assert.equal(await verifyTurnstile("secret", "XXXX.DUMMY.TOKEN.XXXX", null, answer({ success: true })), true);
+  });
+
+  it("fails closed", async () => {
+    let asked = false;
+    const never: Fetcher = async () => {
+      asked = true;
+      throw new Error("offline");
+    };
+    assert.equal(await verifyTurnstile("secret", "", null, never), false);
+    assert.equal(asked, false, "no token, no call");
+    assert.equal(await verifyTurnstile("secret", "token", null, never), false);
+    assert.equal(await verifyTurnstile("secret", "token", null, answer({ success: false, "error-codes": ["timeout-or-duplicate"] })), false);
+    assert.equal(await verifyTurnstile("secret", "token", null, answer({ success: true, action: "login" })), false);
+    assert.equal(await verifyTurnstile("secret", "token", null, answer({ success: "true" })), false);
+    assert.equal(await verifyTurnstile("secret", "token", null, answer(null)), false);
+  });
+
+  it("gives up on a slow answer", async () => {
+    const slow: Fetcher = (_url, init) =>
+      new Promise((_resolve, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true }));
+    // Node does not wait on AbortSignal.timeout's timer, so hold the test open.
+    const hold = setTimeout(() => {}, 5000);
+    assert.equal(await verifyTurnstile("secret", "token", null, slow, 50), false);
+    clearTimeout(hold);
+  });
+});

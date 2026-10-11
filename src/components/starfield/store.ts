@@ -9,7 +9,7 @@ import type { GameCommand } from "./gamepad.ts";
 import { LESSONS } from "./lessons.ts";
 import { clamp01 } from "./math.ts";
 import { type LogEntry, type Save, type SaveStorage, SAVE_VERSION, freshSave, writeSave } from "./saves.ts";
-import { bodyById, nextInNav } from "./system.ts";
+import { bodyById, chapterOf, chapterOpen, nextInNav } from "./system.ts";
 import { TASKS } from "./tasks.ts";
 import {
   HOLD_MAX,
@@ -32,8 +32,11 @@ export type Toast = { id: number; title: string; detail?: string; reward: boolea
 
 export const VIEW_ORDER: readonly CameraView[] = ["cockpit", "chase", "left", "right", "above"];
 
-/** A daily trial run: the stops reached so far, and the time once the last one is. */
-export type TrialRun = { course: Course; splits: number[]; finished: number | null };
+/**
+ * A daily trial run: the stops reached so far, the time once the last one is, and the chapter
+ * the pilot was flying before, to go back to after.
+ */
+export type TrialRun = { course: Course; splits: number[]; finished: number | null; home: string };
 
 /** A trial is under way: flown by hand, so Go, orbits and picks wait until it ends. */
 export function racing(state: Pick<GameState, "trial">): boolean {
@@ -161,7 +164,10 @@ export type GameActions = {
   startTrial(course: Course): void;
   /** A stop reached, at this many seconds into the run. */
   reachStop(split: number): void;
+  /** Ends the run, or leaves the result, and goes back to the chapter flown before. */
   quitTrial(): void;
+  /** Onward, or a pick from the chapter list. Not mid-run, and only to an open chapter. */
+  goToChapter(id: string): void;
   setCallsign(name: string): void;
 };
 
@@ -205,7 +211,8 @@ export function saveOf(state: GameState): Save {
     version: SAVE_VERSION,
     settings: { speed: state.speed, density: state.density, muted: state.muted, view: state.view, aboveSide: state.aboveSide },
     charted: state.charted,
-    chapter: state.chapterId,
+    // A trial's chapter is only borrowed.
+    chapter: state.trial?.home ?? state.chapterId,
     log: state.log,
     helpSeen: state.helpSeen,
     trade: { credits: state.credits, hold: state.hold, depots: state.depots, paid: state.paid },
@@ -419,7 +426,8 @@ export function createGameStore(now = Date.now()): GameStore {
 
     chart(id) {
       const { charted, tour } = get();
-      if (charted.includes(id)) return false;
+      // A daily trial can fly a chapter the pilot has not opened yet; it charts nothing there.
+      if (charted.includes(id) || !chapterOpen(chapterOf(id), charted)) return false;
       const next = [...charted, id];
       const index = tour ? tour.indexOf(id) : -1;
       const after = index >= 0 ? tour?.[index + 1] : undefined;
@@ -429,8 +437,9 @@ export function createGameStore(now = Date.now()): GameStore {
       return true;
     },
     logTask(id, seconds) {
-      const { log } = get();
-      if (log.some((entry) => entry.id === id) || !TASKS.some((task) => task.id === id)) return false;
+      const { log, charted } = get();
+      const task = TASKS.find((item) => item.id === id);
+      if (!task || log.some((entry) => entry.id === id) || !chapterOpen(task.chapter, charted)) return false;
       set({ log: [...log, { id, seconds }] });
       return true;
     },
@@ -547,10 +556,11 @@ export function createGameStore(now = Date.now()): GameStore {
       set({ trialOpen: false });
     },
     startTrial(course) {
+      const { trial, chapterId } = get();
       set({
-        trial: { course, splits: [], finished: null },
+        trial: { course, splits: [], finished: null, home: trial?.home ?? chapterId },
         trialOpen: false,
-        chapterId: "sun",
+        chapterId: course.chapter,
         targetId: course.stops[0]!,
         autopilot: false,
         orbit: false,
@@ -582,7 +592,13 @@ export function createGameStore(now = Date.now()): GameStore {
       set({ trial: { ...trial, splits, finished: split }, trialOpen: true, trialBest: best });
     },
     quitTrial() {
-      set({ trial: null, trialOpen: false });
+      const { trial, chapterId } = get();
+      set({ trial: null, trialOpen: false, chapterId: trial?.home ?? chapterId });
+    },
+    goToChapter(id) {
+      const { chapterId, charted } = get();
+      if (racing(get()) || id === chapterId || !chapterOpen(id, charted)) return;
+      set({ chapterId: id, mapOpen: false });
     },
     setCallsign(name) {
       set({ callsign: name });

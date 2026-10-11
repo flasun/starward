@@ -12,6 +12,7 @@ import {
   writeTrialPrefs,
   type SaveStorage,
 } from "./saves.ts";
+import { goalsIn } from "./system.ts";
 import { START_CREDITS, STATION_LIMIT } from "./trade.ts";
 
 const NOW = 1_800_000_000_000;
@@ -134,6 +135,12 @@ describe("parseSave", () => {
   it("opens a later chapter only once the one before it is charted", () => {
     assert.equal(parseSave({ version: 1, chapter: "stars", charted: ["earth"] }, NOW)!.chapter, "sun");
     assert.equal(parseSave({ version: 1, chapter: "nowhere" }, NOW)!.chapter, "sun");
+  });
+
+  it("drops a chapter that is not open back to the nearest open one before it", () => {
+    const allSun = goalsIn("sun").map((body) => body.id);
+    assert.equal(parseSave({ version: 1, chapter: "web", charted: allSun }, NOW)!.chapter, "stars");
+    assert.equal(parseSave({ version: 1, chapter: "web", charted: [...allSun, "orion-arm"] }, NOW)!.chapter, "galaxy");
   });
 
   it("clamps settings and drops bad trade data", () => {

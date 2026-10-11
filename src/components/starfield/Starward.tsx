@@ -13,7 +13,7 @@ import { TopBar } from "@/components/starfield/panels/TopBar";
 import { TrialPanel } from "@/components/starfield/panels/Trial";
 import { browserStorage, loadSave, loadTrialPrefs, writeSave, writeTrialPrefs } from "@/components/starfield/saves";
 import { keepSaved, paramsOf, racing, saveOf, tradeCue } from "@/components/starfield/store";
-import { bodyById, chapterById, chapterOpen, goalsIn, isChartable } from "@/components/starfield/system";
+import { bodyById, chapterById, chapterOf, chapterOpen, goalsIn, isChartable } from "@/components/starfield/system";
 import { TASKS } from "@/components/starfield/tasks";
 import { TRIAL_LIMIT } from "@/components/starfield/trial";
 
@@ -109,7 +109,9 @@ export function Starward() {
     if (snap.engaged && snap.chartId !== chartSeen.current) {
       chartSeen.current = snap.chartId;
       const chartId = snap.chartId;
-      if (chartId && bodyById(chartId).goal && !store.getState().charted.includes(chartId)) {
+      const { charted } = store.getState();
+      // A trial in a chapter the pilot has not opened charts nothing there.
+      if (chartId && bodyById(chartId).goal && !charted.includes(chartId) && chapterOpen(chapterOf(chartId), charted)) {
         celebrateChart(chartId);
         store.getState().chart(chartId);
       }
@@ -354,7 +356,7 @@ export function Starward() {
         <div className="viewport">
           <canvas ref={canvasRef} className="field" aria-hidden="true" />
           <p className="sr-only">
-            Fly from the Sun to the near stars, the Milky Way, and the galaxy clusters beyond.
+            Fly from the Sun to the near stars, the Milky Way, and out to the edge of sight.
             Switch between cockpit, chase, either wing, and above. Full screen fills the display.
             A and D steer. W and S pitch. Space warps. Escape pauses.
           </p>

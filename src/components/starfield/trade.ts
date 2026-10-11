@@ -26,7 +26,7 @@ const PAY_MILLI = 120;
 const OFFLINE_CAP_MS = 6 * 60 * 60 * 1000;
 
 /** Prices, station costs, and station pay all rise together, chapter by chapter. */
-const SCALE: Record<string, number> = { sun: 1, stars: 2, galaxy: 3, local: 4.5, web: 6 };
+const SCALE: Record<string, number> = { sun: 1, stars: 2, galaxy: 3, local: 4.5, web: 6, deep: 8 };
 
 export function chapterScale(chapter: string): number {
   return SCALE[chapter] ?? 1;

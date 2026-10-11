@@ -1,17 +1,20 @@
 /**
- * The daily time trial: one course a day for everyone, flown by hand. The client records the
- * flight as a trace; the server scores the same trace with the same code, so the board's time
- * is the time the flight shows. No DOM here.
+ * The daily time trial: one course a day for everyone, flown by hand, in a different chapter
+ * each weekday. The client records the flight as a trace; the server scores the same trace with
+ * the same code, so the board's time is the time the flight shows. No DOM here.
  */
 
+import { skinRadius } from "./flight.ts";
 import { cruiseSpeed } from "./math.ts";
-import { bodiesIn, bodyById, bodyPosition, orbitRadius, surveyRadius } from "./system.ts";
+import { type BodyDef, bodiesIn, bodyById, bodyPosition, goalsIn, orbitRadius, surveyRadius } from "./system.ts";
 
 export type Vec = { x: number; y: number; z: number };
 
 export type Course = {
   /** UTC day, YYYY-MM-DD. */
   day: string;
+  /** The chapter the course is flown in. */
+  chapter: string;
   /** Where the solar system is when the run starts, in game seconds. */
   epoch: number;
   start: Vec;
@@ -41,6 +44,17 @@ const STOP_COUNT = 5;
 const START_DISTANCE = 420;
 const START_HEIGHT = 6;
 
+/** The action the bot check names, so a token made for another form on the site does not count. */
+export const TURNSTILE_ACTION = "trial-post";
+
+/** The chapter each weekday flies, Sunday first. Weekends stay round the Sun. */
+export const TRIAL_WEEK: readonly string[] = ["sun", "stars", "galaxy", "local", "web", "deep", "sun"];
+
+/** The chapter a day's course is flown in. */
+export function trialChapter(day: string): string {
+  return TRIAL_WEEK[new Date(`${day}T00:00:00Z`).getUTCDay()] ?? "sun";
+}
+
 /** The UTC day for a time. */
 export function dayOf(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
@@ -68,10 +82,25 @@ function random(seed: number): () => number {
   };
 }
 
-/** Worlds a course can use: round the Sun, out to Jupiter's moons. No probes, no Sun. */
-const POOL = bodiesIn("sun").filter(
+/** Worlds a course round the Sun can use: out to Jupiter's moons. No probes, no Sun. */
+const SUN_POOL = bodiesIn("sun").filter(
   (body) => body.goal && !body.speck && body.id !== "sun" && orbitRadius(bodyById(body.parent ?? body.id).au) < 1700,
 );
+
+/** The places a course can use. On the later maps, every place there is to chart. */
+function poolFor(chapter: string): BodyDef[] {
+  return chapter === "sun" ? SUN_POOL : goalsIn(chapter);
+}
+
+/** How long a course runs from its first stop to its last. The later maps are wider. */
+export const COURSE_LENGTHS: Record<string, [number, number]> = {
+  sun: [1300, 3600],
+  stars: [2200, 5600],
+  galaxy: [3500, 6000],
+  local: [4000, 7000],
+  web: [4500, 6800],
+  deep: [5000, 7500],
+};
 
 const family = (id: string) => bodyById(id).parent ?? id;
 
@@ -79,20 +108,31 @@ function distance(a: Vec, b: Vec): number {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
+/** Far enough from everything on the map that the ship starts in open space, and out of the Sun's glare. */
+function openSpace(chapter: string, at: Vec, epoch: number): boolean {
+  if (chapter === "sun" && Math.hypot(at.x, at.z) < 260) return false;
+  return bodiesIn(chapter).every(
+    (body) => body.quiet || distance(bodyPosition(body, epoch), at) > Math.max(surveyRadius(body), skinRadius(body) * 1.6) + 10,
+  );
+}
+
 /**
- * Today's course: five worlds, never two of one family in a row, each picked from the few
- * nearest the last, so the route hops across the system instead of zigzagging over it.
+ * Today's course, in today's chapter: five places, never two of one family in a row, each picked
+ * from the few nearest the last, so the route hops across the map instead of zigzagging over it.
  */
 export function courseFor(day: string): Course {
+  const chapter = trialChapter(day);
+  const pool = poolFor(chapter);
+  const [shortest, longest] = COURSE_LENGTHS[chapter] ?? COURSE_LENGTHS.sun!;
   const next = random(hash(`starward-trial-${day}`));
   const epoch = Math.floor(next() * 3000);
   const at = (id: string) => bodyPosition(bodyById(id), epoch);
   let stops: string[] = [];
   for (let tries = 0; tries < 400; tries++) {
-    const picked = [POOL[Math.floor(next() * POOL.length)]!.id];
+    const picked = [pool[Math.floor(next() * pool.length)]!.id];
     while (picked.length < STOP_COUNT) {
       const last = picked.at(-1)!;
-      const near = POOL.filter((body) => !picked.includes(body.id) && family(body.id) !== family(last)).sort(
+      const near = pool.filter((body) => !picked.includes(body.id) && family(body.id) !== family(last)).sort(
         (a, b) => distance(at(last), at(a.id)) - distance(at(last), at(b.id)),
       );
       picked.push(near[Math.floor(next() * Math.min(4, near.length))]!.id);
@@ -100,22 +140,22 @@ export function courseFor(day: string): Course {
     let length = 0;
     for (let i = 1; i < picked.length; i++) length += distance(at(picked[i - 1]!), at(picked[i]!));
     stops = picked;
-    if (length > 1300 && length < 3600) break;
+    if (length > shortest && length < longest) break;
   }
   const first = at(stops[0]!);
   const second = at(stops[1]!);
-  let dx = first.x - second.x;
-  let dz = first.z - second.z;
-  const len = Math.hypot(dx, dz) || 1;
-  const turn = (next() - 0.5) * 1.2;
-  [dx, dz] = [(dx / len) * Math.cos(turn) - (dz / len) * Math.sin(turn), (dx / len) * Math.sin(turn) + (dz / len) * Math.cos(turn)];
-  let start = { x: first.x + dx * START_DISTANCE, y: START_HEIGHT, z: first.z + dz * START_DISTANCE };
-  // Not inside the Sun's glare: start on the far side of the first stop instead.
-  if (Math.hypot(start.x, start.z) < 260) start = { x: first.x - dx * START_DISTANCE, y: START_HEIGHT, z: first.z - dz * START_DISTANCE };
+  const away = Math.max(START_DISTANCE, stopRadius(stops[0]!) + 160);
+  const back = Math.atan2(first.z - second.z, first.x - second.x) + (next() - 0.5) * 1.2;
+  // Out past the first stop, away from the second; if something is in the way, further round.
+  let start = { x: first.x + Math.cos(back) * away, y: START_HEIGHT, z: first.z + Math.sin(back) * away };
+  for (let step = 1; step < 16 && !openSpace(chapter, start, epoch); step++) {
+    const angle = back + Math.ceil(step / 2) * (step % 2 ? 1 : -1) * (Math.PI / 8);
+    start = { x: first.x + Math.cos(angle) * away, y: START_HEIGHT, z: first.z + Math.sin(angle) * away };
+  }
   const fx = first.x - start.x;
   const fz = first.z - start.z;
   const fl = Math.hypot(fx, fz) || 1;
-  return { day, epoch, start: round(start), yaw: Math.atan2(-fx / fl, fz / fl), stops };
+  return { day, chapter, epoch, start: round(start), yaw: Math.atan2(-fx / fl, fz / fl), stops };
 }
 
 /** Reaching a stop: its survey range, the same "near" the rest of the game uses. */

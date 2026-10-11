@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { SAVE_KEY, freshSave, type SaveStorage } from "./saves.ts";
 import { LESSONS } from "./lessons.ts";
 import { AWAY_MS, FIRST_FLIGHT, PAD_SPEED_STEP, createGameStore, keepSaved, paramsOf, saveOf, tradeCue } from "./store.ts";
-import { navIn } from "./system.ts";
+import { goalsIn, navIn } from "./system.ts";
 import { HOLD_MAX, STATION_LIMIT, priceOf, stationCost } from "./trade.ts";
 import { courseFor } from "./trial.ts";
 
@@ -160,6 +160,15 @@ describe("progress", () => {
     assert.match(store.getState().coach, /done/);
   });
 
+  it("charts nothing, and logs no challenge, in a chapter that is not open yet", () => {
+    // A daily trial can fly a chapter the pilot has not reached.
+    const store = createGameStore(NOW);
+    assert.equal(store.getState().chart("proxima"), false);
+    assert.equal(store.getState().logTask("dogs", 10), false);
+    assert.deepEqual(store.getState().charted, []);
+    assert.deepEqual(store.getState().log, []);
+  });
+
   it("logs a task once, and only a real one", () => {
     const store = createGameStore(NOW);
     assert.equal(store.getState().logTask("soft", 12), true);
@@ -290,7 +299,7 @@ describe("panels", () => {
 describe("daily trial", () => {
   const course = courseFor("2026-10-10");
 
-  it("starts at the first stop, in the Sun's chapter, with nothing flying the ship", () => {
+  it("starts at the first stop, in the course's chapter, with nothing flying the ship", () => {
     const store = createGameStore(NOW);
     store.setState({ chapterId: "stars", autopilot: true, orbit: true, focus: true, boost: true, trialOpen: true, logOpen: true });
     store.getState().startTrial(course);
@@ -354,6 +363,34 @@ describe("daily trial", () => {
     assert.equal(store.getState().trial, null);
     store.getState().toggleAutopilot();
     assert.equal(store.getState().autopilot, true);
+  });
+
+  it("borrows the course's chapter, saves the pilot's own, and goes back to it after", () => {
+    const store = createGameStore(NOW);
+    store.setState({ chapterId: "galaxy" });
+    const stars = courseFor("2026-10-12");
+    assert.equal(stars.chapter, "stars");
+    store.getState().startTrial(stars);
+    assert.equal(store.getState().chapterId, "stars");
+    assert.equal(saveOf(store.getState()).chapter, "galaxy");
+    for (const time of [1, 2, 3, 4, 5]) store.getState().reachStop(time);
+    store.getState().startTrial(stars);
+    assert.equal(store.getState().trial?.home, "galaxy", "flying again keeps the way home");
+    store.getState().quitTrial();
+    assert.equal(store.getState().chapterId, "galaxy");
+  });
+
+  it("keeps the chapter list and Onward shut mid-run, and to open chapters only", () => {
+    const store = createGameStore(NOW);
+    store.getState().goToChapter("web");
+    assert.equal(store.getState().chapterId, "sun", "web is not open");
+    store.setState({ charted: goalsIn("sun").map((body) => body.id) });
+    store.getState().startTrial(course);
+    store.getState().goToChapter("stars");
+    assert.equal(store.getState().chapterId, course.chapter);
+    store.getState().quitTrial();
+    store.getState().goToChapter("stars");
+    assert.equal(store.getState().chapterId, "stars");
   });
 });
 

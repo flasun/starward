@@ -1,13 +1,13 @@
 # Starward
 
-Fly a real solar system, then the near stars, the Milky Way, and the galaxy clusters beyond. A WebGL2 flight game that runs in the browser.
+Fly a real solar system, then the near stars, the Milky Way, the galaxy clusters beyond, and out to the edge of sight. A WebGL2 flight game that runs in the browser.
 
 ## The game
 
-- **Five chapters:** Round the Sun, The Near Stars, The Milky Way, Out of the Galaxy, and The Web. Chart every place in a chapter to open the next one.
+- **Six chapters:** Round the Sun, The Near Stars, The Milky Way, Out of the Galaxy, The Web, and The Edge of Sight. Chart every place in a chapter to open the next one; a chapter stays open once you have charted anything in it.
 - **Real places.** Sizes and orbital periods are real. Distances are compressed so a flight can cross them.
-- **Flight log.** Twenty challenges, a set for every chapter: an eclipse and a ring cut round the Sun, a corona skim in the near stars, a dive to the galactic core, a postcard of home from beyond Andromeda, a brush past the Great Attractor, and a run to the edge of the map. Each is logged with your time.
-- **Daily trial.** One course a day for everyone: five worlds round the Sun, flown by hand against the clock. Post your time to the day's board under a callsign. The board runs on the Cloudflare build; anywhere else the trial still flies and keeps your best on the device.
+- **Flight log.** Thirty-five challenges, a set for every chapter: an eclipse and a ring cut round the Sun, the gap between Proxima and Alpha Centauri, a skim over a black hole, a postcard of home from beyond Andromeda, a lap round a galaxy cluster, a straight run through the Boötes Void, and a look back from the oldest light there is. Each is logged with your time.
+- **Daily trial.** One course a day for everyone: five places, flown by hand against the clock, in a different chapter each weekday (Monday the near stars, through to Friday at the edge of sight; weekends round the Sun). A trial can fly a chapter you have not reached yet, but charts nothing there. Post your time to the day's board under a callsign. The board runs on the Cloudflare build; anywhere else the trial still flies and keeps your best on the device.
 - **Trade and stations.** Every place you can chart has a market: buy goods where they are cheap and sell where they are dear. Every chapter's open space takes stations that pay while you fly. Prices, station costs, and station pay rise chapter by chapter.
 - **Cameras and steering.** Cockpit, chase, either wing, and overhead views. Three orbit heights, autopilot, gamepads, and optional hands-free flying by gaze, which runs on the device (MediaPipe).
 - **No account.** Progress saves in the browser, in one versioned `starward-save` entry. The trial keeps its callsign, best, and pilot key in `starward-trial`.
@@ -134,13 +134,7 @@ The board lives in the D1 database `starward`, bound as `STARWARD_DB` in `wrangl
 
 How a post is checked: the client records the flight (position every 0.2 game seconds) and the server scores that record with the same code the client uses (`scoreTrace` in `trial.ts`). It has to start at the course start, never fly faster or turn harder than the ship can, and reach every stop in order; the posted time is the server's. A callsign belongs to the browser that first posted with it. Posts are limited to 20 per network per 10 minutes. None of this stops a determined cheat; sign-in can come later without losing the board.
 
-Optional bot check with [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/): create a widget for the Worker's hostname, then set its keys on the Worker. When both are set, posting needs the check.
-
-```sh
-npx wrangler secret put TURNSTILE_SECRET
-# The site key is public; a plain variable is fine:
-#   "vars": { "TURNSTILE_SITE_KEY": "0x4AAAAAA..." } in wrangler.jsonc, or a dashboard variable.
-```
+The course comes from the day and the map, so a deploy that changes places or the course rules also changes that day's course: a run flown on the old page and posted after the deploy is refused. Deploy close to midnight UTC to keep that window small.
 
 `TRIAL_SALT` (a secret, optional) salts the daily network hashes kept for rate limiting.
 
@@ -155,6 +149,19 @@ npx wrangler d1 execute STARWARD_DB --remote --command "DELETE FROM pilots WHERE
 
 To add a custom domain later, put a `routes` entry with `"custom_domain": true` in `wrangler.jsonc`. The domain has to be a zone in the same Cloudflare account, and Cloudflare then creates the DNS record and certificate on the next deploy.
 
+### Bot check
+
+Posts can go through [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/), so a script can't fill the board. It is off until you give the Worker a widget's keys:
+
+1. In the Cloudflare dashboard, open **Turnstile** and **Add widget**. Name it Starward, add the Worker's hostname (`starward.<your-subdomain>.workers.dev`, and your custom domain if you have one), and keep the mode **Managed**.
+2. Paste the **site key** into `wrangler.jsonc` as `"vars": { "TURNSTILE_SITE_KEY": "0x4AAAAAA..." }`. It is public, so it can be committed.
+3. Store the **secret key** on the Worker: `npx wrangler secret put TURNSTILE_SECRET`, then paste it.
+4. Deploy (`npm run deploy:cloudflare`).
+
+With both set, the check runs out of sight when a run finishes and only asks for a click when Cloudflare is unsure. Every post gets a fresh check, and the server asks Cloudflare before it scores the run. If Cloudflare does not answer within five seconds, the post is refused rather than let through.
+
+To try it locally, run the Cloudflare build with Cloudflare's [test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/): `npm run build:cloudflare`, then `npx wrangler dev --var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET:1x0000000000000000000000000000000AA`. Site key `3x00000000000000000000FF` makes it ask for a click.
+
 ## Privacy
 
 - **Progress stays in the browser.** The save, settings, the trial's callsign and best, and the trial's pilot key live in `localStorage` (`starward-save`, `starward-trial`).
@@ -167,7 +174,7 @@ To add a custom domain later, put a `routes` entry with `"custom_domain": true` 
 
 1. Deploy to Cloudflare: `npm run deploy:cloudflare`, or Workers Builds with the deploy command above. Either one creates the leaderboard tables.
 2. Open `starward.<your-subdomain>.workers.dev`: fly, then open Daily, finish a run, and post it. It should show as #1.
-3. Optional: a Turnstile widget and its keys, and a `TRIAL_SALT` secret (see above).
+3. Turn on the bot check (see [Bot check](#bot-check)), and optionally set a `TRIAL_SALT` secret.
 4. Optional: a custom domain (`routes` in `wrangler.jsonc`).
 5. Paste the address into a chat app to check the share card (`public/og.jpg`).
 6. Watch the Worker's logs in the Cloudflare dashboard for the first days.
