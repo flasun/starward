@@ -1,12 +1,12 @@
 # Starward
 
-Fly a real solar system, then the near stars, the Milky Way, and the galaxy clusters beyond. A WebGL2 flight game that runs in the browser.
+Fly a real solar system, then the near stars, the Milky Way, the galaxy clusters beyond, and out to the edge of sight. A WebGL2 flight game that runs in the browser.
 
 ## The game
 
-- **Five chapters:** Round the Sun, The Near Stars, The Milky Way, Out of the Galaxy, and The Web. Chart every place in a chapter to open the next one.
+- **Six chapters:** Round the Sun, The Near Stars, The Milky Way, Out of the Galaxy, The Web, and The Edge of Sight. Chart every place in a chapter to open the next one; a chapter stays open once you have charted anything in it.
 - **Real places.** Sizes and orbital periods are real. Distances are compressed so a flight can cross them.
-- **Flight log.** Twenty challenges, a set for every chapter: an eclipse and a ring cut round the Sun, a corona skim in the near stars, a dive to the galactic core, a postcard of home from beyond Andromeda, a brush past the Great Attractor, and a run to the edge of the map. Each is logged with your time.
+- **Flight log.** Thirty-five challenges, a set for every chapter: an eclipse and a ring cut round the Sun, the gap between Proxima and Alpha Centauri, a skim over a black hole, a postcard of home from beyond Andromeda, a lap round a galaxy cluster, a straight run through the Boötes Void, and a look back from the oldest light there is. Each is logged with your time.
 - **Daily trial.** One course a day for everyone: five worlds round the Sun, flown by hand against the clock. Post your time to the day's board under a callsign. The board runs on the Cloudflare build; anywhere else the trial still flies and keeps your best on the device.
 - **Trade and stations.** Every place you can chart has a market: buy goods where they are cheap and sell where they are dear. Every chapter's open space takes stations that pay while you fly. Prices, station costs, and station pay rise chapter by chapter.
 - **Cameras and steering.** Cockpit, chase, either wing, and overhead views. Three orbit heights, autopilot, gamepads, and optional hands-free flying by gaze, which runs on the device (MediaPipe).

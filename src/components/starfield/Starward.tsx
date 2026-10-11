@@ -354,7 +354,7 @@ export function Starward() {
         <div className="viewport">
           <canvas ref={canvasRef} className="field" aria-hidden="true" />
           <p className="sr-only">
-            Fly from the Sun to the near stars, the Milky Way, and the galaxy clusters beyond.
+            Fly from the Sun to the near stars, the Milky Way, and out to the edge of sight.
             Switch between cockpit, chase, either wing, and above. Full screen fills the display.
             A and D steer. W and S pitch. Space warps. Escape pauses.
           </p>

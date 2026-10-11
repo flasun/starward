@@ -50,6 +50,8 @@ export type BodyDef = {
   form?: "star" | "galaxy" | "cluster" | "cloud";
   /** Journey chapter. Missing means the solar system. */
   chapter?: string;
+  /** Nothing solid to hit, such as a void: the ship flies straight through. */
+  hollow?: boolean;
 };
 
 export const BODIES: BodyDef[] = [
@@ -504,7 +506,8 @@ export const CHAPTERS = [
   { id: "stars", name: "The Near Stars", next: "galaxy", first: "proxima" },
   { id: "galaxy", name: "The Milky Way", next: "local", first: "orion-arm" },
   { id: "local", name: "Out of the Galaxy", next: "web", first: "lmc" },
-  { id: "web", name: "The Web", next: null, first: "virgo" },
+  { id: "web", name: "The Web", next: "deep", first: "virgo" },
+  { id: "deep", name: "The Edge of Sight", next: null, first: "laniakea" },
 ] as const;
 
 export type ChapterId = (typeof CHAPTERS)[number]["id"];
@@ -548,11 +551,22 @@ export function chapterDone(chapter: string, charted: readonly string[]): boolea
   return goals.length > 0 && goals.every((body) => charted.includes(body.id));
 }
 
+/**
+ * A chapter opens when the one before it is charted, and stays open once anything in it or past
+ * it is charted, so places added to an earlier chapter later never lock a pilot out.
+ */
 export function chapterOpen(chapter: string, charted: readonly string[]): boolean {
   const index = CHAPTERS.findIndex((item) => item.id === chapter);
-  if (index <= 0) return true;
+  if (index < 0) return false;
+  if (index === 0) return true;
   const previous = CHAPTERS[index - 1];
-  return previous ? chapterDone(previous.id, charted) : false;
+  if (previous && chapterDone(previous.id, charted)) return true;
+  return CHAPTERS.slice(index).some((item) => goalsIn(item.id).some((body) => charted.includes(body.id)));
+}
+
+/** The chapter a place belongs to. */
+export function chapterOf(id: string): string {
+  return bodyById(id).chapter ?? "sun";
 }
 
 export function bodyById(id: string): BodyDef {

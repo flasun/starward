@@ -160,6 +160,15 @@ describe("progress", () => {
     assert.match(store.getState().coach, /done/);
   });
 
+  it("charts nothing, and logs no challenge, in a chapter that is not open yet", () => {
+    // A daily trial can fly a chapter the pilot has not reached.
+    const store = createGameStore(NOW);
+    assert.equal(store.getState().chart("proxima"), false);
+    assert.equal(store.getState().logTask("dogs", 10), false);
+    assert.deepEqual(store.getState().charted, []);
+    assert.deepEqual(store.getState().log, []);
+  });
+
   it("logs a task once, and only a real one", () => {
     const store = createGameStore(NOW);
     assert.equal(store.getState().logTask("soft", 12), true);

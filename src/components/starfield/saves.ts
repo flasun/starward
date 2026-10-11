@@ -162,10 +162,13 @@ function readCharted(value: unknown): string[] {
   return [...new Set(ids)];
 }
 
-/** A chapter the save has not opened yet falls back to the Sun. */
+/** A chapter the save has not opened falls back to the nearest open one before it. */
 function readChapter(value: unknown, charted: readonly string[]): string {
-  if (typeof value !== "string") return "sun";
-  return CHAPTERS.some((chapter) => chapter.id === value) && chapterOpen(value, charted) ? value : "sun";
+  const index = CHAPTERS.findIndex((chapter) => chapter.id === value);
+  for (let i = index; i > 0; i--) {
+    if (chapterOpen(CHAPTERS[i]!.id, charted)) return CHAPTERS[i]!.id;
+  }
+  return "sun";
 }
 
 function readLog(value: unknown): LogEntry[] {

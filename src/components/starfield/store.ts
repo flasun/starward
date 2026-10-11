@@ -9,7 +9,7 @@ import type { GameCommand } from "./gamepad.ts";
 import { LESSONS } from "./lessons.ts";
 import { clamp01 } from "./math.ts";
 import { type LogEntry, type Save, type SaveStorage, SAVE_VERSION, freshSave, writeSave } from "./saves.ts";
-import { bodyById, nextInNav } from "./system.ts";
+import { bodyById, chapterOf, chapterOpen, nextInNav } from "./system.ts";
 import { TASKS } from "./tasks.ts";
 import {
   HOLD_MAX,
@@ -419,7 +419,8 @@ export function createGameStore(now = Date.now()): GameStore {
 
     chart(id) {
       const { charted, tour } = get();
-      if (charted.includes(id)) return false;
+      // A daily trial can fly a chapter the pilot has not opened yet; it charts nothing there.
+      if (charted.includes(id) || !chapterOpen(chapterOf(id), charted)) return false;
       const next = [...charted, id];
       const index = tour ? tour.indexOf(id) : -1;
       const after = index >= 0 ? tour?.[index + 1] : undefined;
@@ -429,8 +430,9 @@ export function createGameStore(now = Date.now()): GameStore {
       return true;
     },
     logTask(id, seconds) {
-      const { log } = get();
-      if (log.some((entry) => entry.id === id) || !TASKS.some((task) => task.id === id)) return false;
+      const { log, charted } = get();
+      const task = TASKS.find((item) => item.id === id);
+      if (!task || log.some((entry) => entry.id === id) || !chapterOpen(task.chapter, charted)) return false;
       set({ log: [...log, { id, seconds }] });
       return true;
     },

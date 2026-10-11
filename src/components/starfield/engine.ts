@@ -572,7 +572,7 @@ export class StarfieldEngine {
       const { along: vTan, toward: vRad } = orbitPace(want, dist, params.reducedMotion);
       let hop = 0;
       for (const other of this.roster()) {
-        if (other.id === body.id || other.quiet) continue;
+        if (other.id === body.id || other.quiet || other.hollow) continue;
         const op = bodyPosition(other, this.time);
         const ox = this.shipX - op.x;
         const oy = this.shipY - op.y;
@@ -824,7 +824,7 @@ export class StarfieldEngine {
       rank: number;
     } | null = null;
     for (const body of this.roster()) {
-      if (body.quiet || body.id === id) continue;
+      if (body.quiet || body.hollow || body.id === id) continue;
       const pos = bodyPosition(body, this.time);
       const pad = skinRadius(body) * (body.id === "sun" ? 1.45 : 1.15) + (body.id === "sun" ? 16 : 4);
       const wx = pos.x - sx;
@@ -882,7 +882,7 @@ export class StarfieldEngine {
     let yawNudge = 0;
     let pitchNudge = 0;
     for (const body of this.roster()) {
-      if (body.quiet || body.id === targetId) continue;
+      if (body.quiet || body.hollow || body.id === targetId) continue;
       const pos = bodyPosition(body, this.time);
       const dx = pos.x - this.shipX;
       const dy = pos.y - this.shipY;
@@ -1081,6 +1081,8 @@ export class StarfieldEngine {
       const form = row.body.form;
       if (row.body.id === "sun" || form === "star") {
         push(row, row.body.id === "sun" ? 3.7 : 2.8, row.body.id === "sun" ? 3.7 : 2.8, 0);
+        // A quasar's jet, straight out of both poles.
+        if (row.body.id === "3c273") push(row, 0.32, 5.2, 0);
         push(row, 1, 1, 0.08);
         continue;
       }
@@ -1091,7 +1093,8 @@ export class StarfieldEngine {
       }
       if (form === "cluster" || form === "cloud") {
         push(row, form === "cloud" ? 1.65 : 2.15, form === "cloud" ? 1.65 : 2.15, 0);
-        push(row, 0.42, 0.42, 0.08);
+        // A void has no bright heart.
+        if (!row.body.hollow) push(row, 0.42, 0.42, 0.08);
         continue;
       }
       if (row.body.id === "halley") push(row, 2.6, 2.6, 0);
@@ -1228,6 +1231,7 @@ export class StarfieldEngine {
 
   private keepOutside(): void {
     for (const body of this.roster()) {
+      if (body.hollow) continue;
       const pos = bodyPosition(body, this.time);
       const dx = this.shipX - pos.x;
       const dy = this.shipY - pos.y;

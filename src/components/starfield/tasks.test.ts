@@ -437,3 +437,232 @@ describe("The Web", () => {
     assert.equal(brush(edgeOf * 2), null);
   });
 });
+
+/** Straight from `from` to `to` over `seconds`, nose along the way. */
+function line(task: TaskId, chapter: string, from: Vec, to: Vec, seconds: number, extra: (time: number) => Partial<TaskContext> = () => ({})) {
+  const ahead = { x: to.x + (to.x - from.x), y: to.y + (to.y - from.y), z: to.z + (to.z - from.z) };
+  return flyFor(only(task), seconds + 0.5, (time) => {
+    const f = Math.min(1, time / seconds);
+    const ship = { x: from.x + (to.x - from.x) * f, y: from.y + (to.y - from.y) * f, z: from.z + (to.z - from.z) * f };
+    return frame(ship, ahead, time, { chapter, ...extra(time) });
+  });
+}
+
+/** Past `id`'s side at `offset`, slow on the way in and at `exitSpeed` on the way out. */
+function pass(task: TaskId, chapter: string, id: string, offset: number, exitSpeed: number): TaskId | null {
+  const center = at(id, 0);
+  return flyFor(only(task), 8, (time) => {
+    const ship = { x: center.x + offset, y: center.y, z: center.z - 1600 + time * 400 };
+    return frame(ship, { ...ship, z: ship.z + 10 }, time, { chapter, speed: ship.z < center.z ? 40 : exitSpeed });
+  });
+}
+
+/** Three seconds and more `distance` from `id`'s center. */
+function hover(task: TaskId, chapter: string, id: string, distance: number, extra: Partial<TaskContext> = {}): TaskId | null {
+  const center = at(id, 0);
+  return flyFor(only(task), 4, (time) => {
+    const ship = { ...center, x: center.x + distance };
+    return frame(ship, { ...ship, z: ship.z + 10 }, time, { chapter, ...extra });
+  });
+}
+
+describe("The Near Stars, added", () => {
+  const dogs = (second: number) =>
+    route("dogs", "stars", [
+      [0, NOWHERE],
+      [1, near("sirius", 60)],
+      [2, NOWHERE],
+      [second, near("procyon", 60)],
+    ]);
+
+  it("Dog stars counts Sirius and Procyon inside 25 seconds", () => {
+    assert.equal(dogs(18), "dogs");
+    assert.equal(dogs(30), null);
+  });
+
+  it("Giant slingshot counts grazing a giant and leaving faster", () => {
+    assert.equal(pass("giant", "stars", "betelgeuse", 300, 60), "giant");
+    assert.equal(pass("giant", "stars", "betelgeuse", 300, 40), null);
+    assert.equal(pass("giant", "stars", "betelgeuse", 900, 60), null);
+  });
+
+  const proxima = at("proxima", 0);
+  const alpha = at("alpha", 0);
+  const span = Math.hypot(alpha.x - proxima.x, alpha.y - proxima.y, alpha.z - proxima.z);
+  const along = (distance: number, side = 0): Vec => ({
+    x: proxima.x + ((alpha.x - proxima.x) / span) * distance,
+    y: proxima.y + ((alpha.y - proxima.y) / span) * distance + side,
+    z: proxima.z + ((alpha.z - proxima.z) / span) * distance,
+  });
+  const thread = (ship: Vec, extra: Partial<TaskContext> = {}) =>
+    fly(only("gap"), (time) => frame(ship, { ...ship, z: ship.z + 10 }, time, { chapter: "stars", ...extra }));
+  const middle = (surveyRadius(bodyById("proxima")) + span - surveyRadius(bodyById("alpha"))) / 2;
+
+  it("Centauri gap counts flying between the two, clear of both", () => {
+    assert.equal(thread(along(middle)), "gap");
+  });
+
+  it("Centauri gap does not count inside either one's range, well off the line, or on Go", () => {
+    assert.equal(thread(along(20)), null);
+    assert.equal(thread(along(span - 20)), null);
+    assert.equal(thread(along(middle, 120)), null);
+    assert.equal(thread(along(middle), { autopilot: true }), null);
+  });
+});
+
+describe("The Milky Way, added", () => {
+  const nursery = (last: number) =>
+    route("nursery", "galaxy", [
+      [0, NOWHERE],
+      [1, near("orion-nebula", 80)],
+      [2, NOWHERE],
+      [12, near("carina", 80)],
+      [13, NOWHERE],
+      [last, near("eagle", 80)],
+    ]);
+
+  it("Nursery run counts all three nebulae inside 45 seconds", () => {
+    assert.equal(nursery(30), "nursery");
+    assert.equal(nursery(50), null);
+  });
+
+  const skin = skinRadius(bodyById("cygnus-x1"));
+
+  it("Event horizon counts three seconds just above Cygnus X-1, by hand", () => {
+    assert.equal(hover("horizon", "galaxy", "cygnus-x1", skin * 1.25), "horizon");
+    assert.equal(hover("horizon", "galaxy", "cygnus-x1", skin * 2), null);
+    assert.equal(hover("horizon", "galaxy", "cygnus-x1", skin * 1.25, { orbiting: true }), null);
+  });
+
+  it("Round the remnant counts a full turn round the Ring Nebula, apart from Cluster circuit", () => {
+    const ring = holdRadius(bodyById("ring-nebula"));
+    assert.equal(circling("remnant", "galaxy", "ring-nebula", ring, 1.05), "remnant");
+    assert.equal(circling("remnant", "galaxy", "ring-nebula", ring, 0.5), null);
+    // Both circling challenges track at once without resetting each other.
+    const memory = createTaskState();
+    for (const task of TASKS) if (task.id !== "circuit" && task.id !== "remnant") memory.done[task.id] = true;
+    const center = at("pleiades", 0);
+    const radius = holdRadius(bodyById("pleiades"));
+    const hit = flyFor(memory, 20, (time) => {
+      const angle = (time / 20) * 1.05 * Math.PI * 2;
+      const ship = { x: center.x + Math.cos(angle) * radius, y: center.y, z: center.z + Math.sin(angle) * radius };
+      return frame(ship, center, time, { chapter: "galaxy" });
+    });
+    assert.equal(hit, "circuit");
+  });
+});
+
+describe("Out of the Galaxy, added", () => {
+  const tour = (last: number) =>
+    route("group", "local", [
+      [0, NOWHERE],
+      [1, near("triangulum", 120)],
+      [2, NOWHERE],
+      [10, near("andromeda", 150)],
+      [11, NOWHERE],
+      [last, near("m32", 60)],
+    ]);
+
+  it("Local Group tour counts the three inside 40 seconds", () => {
+    assert.equal(tour(25), "group");
+    assert.equal(tour(50), null);
+  });
+
+  it("Satellite lap counts a full turn round a Magellanic Cloud", () => {
+    assert.equal(circling("satellite", "local", "smc", holdRadius(bodyById("smc")), 1.05), "satellite");
+  });
+
+  const aimAt = (ship: Vec, extra: Partial<TaskContext> = {}) =>
+    flyFor(only("collision"), 4, (time) => frame(ship, at("andromeda", 0), time, { chapter: "local", ...extra }));
+
+  it("Collision course counts keeping Andromeda on target from beside the Milky Way", () => {
+    assert.equal(aimAt(near("home-galaxy", 400)), "collision");
+  });
+
+  it("Collision course does not count from far off, or with focus aiming", () => {
+    assert.equal(aimAt(near("lmc", 100)), null);
+    assert.equal(aimAt(near("home-galaxy", 400), { focus: true }), null);
+  });
+});
+
+describe("The Web, added", () => {
+  const hop = (last: number) =>
+    route("spiral", "web", [
+      [0, NOWHERE],
+      [1, near("centaurus-a", 80)],
+      [2, NOWHERE],
+      [12, near("whirlpool", 80)],
+      [13, NOWHERE],
+      [last, near("sombrero", 80)],
+    ]);
+
+  it("Spiral hop counts the three galaxies inside 40 seconds", () => {
+    assert.equal(hop(30), "spiral");
+    assert.equal(hop(45), null);
+  });
+
+  it("Cluster lap counts a full turn round a galaxy cluster", () => {
+    assert.equal(circling("clusters", "web", "fornax", holdRadius(bodyById("fornax")), 1.05), "clusters");
+  });
+});
+
+describe("The Edge of Sight", () => {
+  const void_ = at("bootes-void", 0);
+  const reach = surveyRadius(bodyById("bootes-void"));
+  const across = (offset: number, extra: (time: number) => Partial<TaskContext> = () => ({})) =>
+    line(
+      "void",
+      "deep",
+      { x: void_.x - reach * 1.5, y: void_.y, z: void_.z + offset },
+      { x: void_.x + reach * 1.5, y: void_.y, z: void_.z + offset },
+      10,
+      extra,
+    );
+
+  it("Through the void counts a straight crossing by hand", () => {
+    assert.equal(across(0), "void");
+    assert.equal(across(reach * 0.4), "void");
+  });
+
+  it("Through the void does not count a glancing pass, or Go for any of it", () => {
+    assert.equal(across(reach * 0.8), null);
+    assert.equal(across(0, (time) => (time > 5 ? { autopilot: true } : {})), null);
+  });
+
+  it("Quasar skim counts three seconds just above 3C 273", () => {
+    const skin = skinRadius(bodyById("3c273"));
+    assert.equal(hover("quasar", "deep", "3c273", skin * 1.25), "quasar");
+    assert.equal(hover("quasar", "deep", "3c273", skin * 2), null);
+  });
+
+  const walls = (arrive: number) =>
+    route("walls", "deep", [
+      [0, near("sloan-wall", 200)],
+      [1, NOWHERE],
+      [arrive, near("hercules-wall", 250)],
+    ]);
+
+  it("Wall to wall counts the run inside 30 seconds", () => {
+    assert.equal(walls(20), "walls");
+    assert.equal(walls(35), null);
+  });
+
+  const lookBack = (ship: Vec, extra: Partial<TaskContext> = {}) =>
+    flyFor(only("lookback"), 4, (time) => frame(ship, at("laniakea", 0), time, { chapter: "deep", ...extra }));
+
+  it("Look back counts keeping Laniakea on target from the Cosmic Background", () => {
+    assert.equal(lookBack(near("cosmic-background", 500)), "lookback");
+    assert.equal(lookBack(near("laniakea", 600)), null);
+    assert.equal(lookBack(near("cosmic-background", 500), { focus: true }), null);
+  });
+});
+
+describe("challenge list", () => {
+  it("gives every chapter at least four challenges, each with its own id", () => {
+    const ids = TASKS.map((task) => task.id);
+    assert.equal(new Set(ids).size, ids.length);
+    for (const chapter of ["sun", "stars", "galaxy", "local", "web", "deep"]) {
+      assert.ok(TASKS.filter((task) => task.chapter === chapter).length >= 4, chapter);
+    }
+  });
+});

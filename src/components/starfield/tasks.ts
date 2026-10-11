@@ -80,6 +80,24 @@ export const TASKS = [
     how: "Fly just above a star’s surface for three seconds, by hand.",
   },
   {
+    id: "dogs",
+    chapter: "stars",
+    name: "Dog stars",
+    how: "Reach Sirius and Procyon within 25 seconds of each other, without Go.",
+  },
+  {
+    id: "giant",
+    chapter: "stars",
+    name: "Giant slingshot",
+    how: "Graze a giant star, miss it, and leave faster than you arrived.",
+  },
+  {
+    id: "gap",
+    chapter: "stars",
+    name: "Centauri gap",
+    how: "Thread the gap between Proxima and Alpha Centauri by hand, touching neither.",
+  },
+  {
     id: "arms",
     chapter: "galaxy",
     name: "Arm to arm",
@@ -96,6 +114,24 @@ export const TASKS = [
     chapter: "galaxy",
     name: "Core dive",
     how: "Hold a low orbit round the Galactic Core for ten seconds.",
+  },
+  {
+    id: "nursery",
+    chapter: "galaxy",
+    name: "Nursery run",
+    how: "Reach the Orion, Carina and Eagle nebulae within 45 seconds, without Go.",
+  },
+  {
+    id: "horizon",
+    chapter: "galaxy",
+    name: "Event horizon",
+    how: "Fly just above Cygnus X-1 for three seconds, by hand.",
+  },
+  {
+    id: "remnant",
+    chapter: "galaxy",
+    name: "Round the remnant",
+    how: "Circle the Ring Nebula or the Crab Nebula all the way round. A slingshot lap counts.",
   },
   {
     id: "magellan",
@@ -116,6 +152,24 @@ export const TASKS = [
     how: "Graze Andromeda or Triangulum, miss it, and leave faster than you arrived.",
   },
   {
+    id: "group",
+    chapter: "local",
+    name: "Local Group tour",
+    how: "Reach Triangulum, Andromeda and Messier 32 within 40 seconds, without Go.",
+  },
+  {
+    id: "satellite",
+    chapter: "local",
+    name: "Satellite lap",
+    how: "Circle a Magellanic Cloud all the way round. A slingshot lap counts.",
+  },
+  {
+    id: "collision",
+    chapter: "local",
+    name: "Collision course",
+    how: "From beside the Milky Way, steer yourself and keep Andromeda on target for three seconds.",
+  },
+  {
     id: "edge",
     chapter: "web",
     name: "Edge of the map",
@@ -132,6 +186,42 @@ export const TASKS = [
     chapter: "web",
     name: "Brush the Attractor",
     how: "Fly just above the Great Attractor for three seconds, by hand.",
+  },
+  {
+    id: "spiral",
+    chapter: "web",
+    name: "Spiral hop",
+    how: "Reach Centaurus A, the Whirlpool and the Sombrero within 40 seconds, without Go.",
+  },
+  {
+    id: "clusters",
+    chapter: "web",
+    name: "Cluster lap",
+    how: "Circle a galaxy cluster all the way round. A slingshot lap counts.",
+  },
+  {
+    id: "void",
+    chapter: "deep",
+    name: "Through the void",
+    how: "Fly straight through the Boötes Void by hand, in one side and out the far one.",
+  },
+  {
+    id: "quasar",
+    chapter: "deep",
+    name: "Quasar skim",
+    how: "Fly just above 3C 273 for three seconds, by hand.",
+  },
+  {
+    id: "walls",
+    chapter: "deep",
+    name: "Wall to wall",
+    how: "Fly from the Sloan Great Wall to the Hercules Great Wall in under 30 seconds, without Go.",
+  },
+  {
+    id: "lookback",
+    chapter: "deep",
+    name: "Look back",
+    how: "From the Cosmic Background, steer yourself and keep Laniakea on target for three seconds.",
   },
 ] as const;
 
@@ -161,12 +251,14 @@ export type TaskMemory = {
   held: Partial<Record<TaskId, number>>;
   /** Timed routes under way: when each started and the places it has reached. */
   routes: Partial<Record<TaskId, { start: number; seen: string[] }>>;
-  /** The place being circled, and how far round the ship has gone. */
-  circle: { id: string; last: number; swept: number } | null;
+  /** For each circling challenge, the place being circled and how far round the ship has gone. */
+  circles: Partial<Record<TaskId, { id: string; last: number; swept: number }>>;
+  /** Where the ship came into a place it can fly through, and whether it was by hand all the way. */
+  passes: Partial<Record<TaskId, { x: number; y: number; z: number; byHand: boolean }>>;
 };
 
 export function createTaskState(): TaskMemory {
-  return { done: {}, chapter: "sun", inside: {}, sling: null, wing: 0, eclipse: 0, held: {}, routes: {}, circle: null };
+  return { done: {}, chapter: "sun", inside: {}, sling: null, wing: 0, eclipse: 0, held: {}, routes: {}, circles: {}, passes: {} };
 }
 
 export type TaskContext = {
@@ -378,6 +470,9 @@ function stepJourney(memory: TaskMemory, ctx: TaskContext, mark: Mark): void {
     hold(memory, ctx, "pole", byHand && onTarget(ctx, bodyPosition(polaris, ctx.time)), 4, mark);
     const stars = bodiesIn("stars").filter((body) => body.form === "star");
     hold(memory, ctx, "corona", skimming(ctx, stars), 3, mark);
+    visitAll(memory, ctx, "dogs", ["sirius", "procyon"], 25, entered, mark);
+    slingshot(memory, ctx, ["arcturus", "betelgeuse", "polaris", "rigel"], "giant", mark);
+    if (byHand && between(ctx, "proxima", "alpha")) mark("gap");
   } else if (ctx.chapter === "galaxy") {
     leg(memory, ctx, "arms", "orion-arm", "perseus-arm", 30, entered, left, mark);
     circle(memory, ctx, "circuit", ["pleiades", "omega", "core"], mark);
@@ -385,6 +480,9 @@ function stepJourney(memory: TaskMemory, ctx: TaskContext, mark: Mark): void {
     const pos = bodyPosition(core, ctx.time);
     const dist = hypot(pos.x - ship.x, pos.y - ship.y, pos.z - ship.z);
     hold(memory, ctx, "core", dist > skinRadius(core) && dist < orbitLevelRadius(core, 0) * 1.3, 10, mark);
+    visitAll(memory, ctx, "nursery", ["orion-nebula", "carina", "eagle"], 45, entered, mark);
+    hold(memory, ctx, "horizon", skimming(ctx, [bodyById("cygnus-x1")]), 3, mark);
+    circle(memory, ctx, "remnant", ["ring-nebula", "crab"], mark);
   } else if (ctx.chapter === "local") {
     visitAll(memory, ctx, "magellan", ["lmc", "smc"], 20, entered, mark);
     const framed = ["home-galaxy", "andromeda"].every((id) => {
@@ -393,6 +491,12 @@ function stepJourney(memory: TaskMemory, ctx: TaskContext, mark: Mark): void {
     });
     hold(memory, ctx, "postcard", framed, 1, mark);
     slingshot(memory, ctx, ["andromeda", "triangulum"], "swing", mark);
+    visitAll(memory, ctx, "group", ["triangulum", "andromeda", "m32"], 40, entered, mark);
+    circle(memory, ctx, "satellite", ["lmc", "smc"], mark);
+    const milky = bodyPosition(bodyById("home-galaxy"), ctx.time);
+    const besideHome = hypot(milky.x - ship.x, milky.y - ship.y, milky.z - ship.z) < 700;
+    const andromeda = bodyPosition(bodyById("andromeda"), ctx.time);
+    hold(memory, ctx, "collision", besideHome && byHand && onTarget(ctx, andromeda), 3, mark);
   } else if (ctx.chapter === "web") {
     leg(memory, ctx, "edge", "virgo", "shapley", 40, entered, left, mark);
     const shapley = bodyById("shapley");
@@ -402,7 +506,66 @@ function stepJourney(memory: TaskMemory, ctx: TaskContext, mark: Mark): void {
     const virgo = bodyById("virgo");
     hold(memory, ctx, "home", atEdge && byHand && onTarget(ctx, bodyPosition(virgo, ctx.time)), 3, mark);
     hold(memory, ctx, "attractor", skimming(ctx, [bodyById("attractor")]), 3, mark);
+    visitAll(memory, ctx, "spiral", ["centaurus-a", "whirlpool", "sombrero"], 40, entered, mark);
+    circle(memory, ctx, "clusters", ["virgo", "fornax", "perseus-cluster", "coma", "stephan", "shapley"], mark);
+  } else if (ctx.chapter === "deep") {
+    passThrough(memory, ctx, "void", "bootes-void", byHand, entered, left, mark);
+    hold(memory, ctx, "quasar", skimming(ctx, [bodyById("3c273")]), 3, mark);
+    leg(memory, ctx, "walls", "sloan-wall", "hercules-wall", 30, entered, left, mark);
+    const glow = bodyPosition(bodyById("cosmic-background"), ctx.time);
+    const atGlow = hypot(glow.x - ship.x, glow.y - ship.y, glow.z - ship.z) < 1400;
+    const home = bodyPosition(bodyById("laniakea"), ctx.time);
+    hold(memory, ctx, "lookback", atGlow && byHand && onTarget(ctx, home), 3, mark);
   }
+}
+
+/**
+ * In the gap between two places: alongside the line joining them, close to it, and outside both
+ * arrival ranges.
+ */
+function between(ctx: TaskContext, a: string, b: string): boolean {
+  const pa = bodyPosition(bodyById(a), ctx.time);
+  const pb = bodyPosition(bodyById(b), ctx.time);
+  const abx = pb.x - pa.x;
+  const aby = pb.y - pa.y;
+  const abz = pb.z - pa.z;
+  const len = hypot(abx, aby, abz) || 1;
+  const along = ((ctx.shipX - pa.x) * abx + (ctx.shipY - pa.y) * aby + (ctx.shipZ - pa.z) * abz) / len;
+  if (along <= 0 || along >= len) return false;
+  const cx = pa.x + (abx / len) * along;
+  const cy = pa.y + (aby / len) * along;
+  const cz = pa.z + (abz / len) * along;
+  const off = hypot(ctx.shipX - cx, ctx.shipY - cy, ctx.shipZ - cz);
+  const clear = (id: string, at: Vec) => hypot(ctx.shipX - at.x, ctx.shipY - at.y, ctx.shipZ - at.z) > surveyRadius(bodyById(id));
+  return off < len * 0.2 && clear(a, pa) && clear(b, pb);
+}
+
+/**
+ * Through a place the ship can fly into, by hand from entry to exit, coming out on the far side:
+ * the exit at least 120 degrees round from the entry, so the line ran near the middle.
+ */
+function passThrough(
+  memory: TaskMemory,
+  ctx: TaskContext,
+  task: TaskId,
+  id: string,
+  byHand: boolean,
+  entered: readonly string[],
+  left: readonly string[],
+  mark: Mark,
+): void {
+  const center = bodyPosition(bodyById(id), ctx.time);
+  const offset = { x: ctx.shipX - center.x, y: ctx.shipY - center.y, z: ctx.shipZ - center.z };
+  if (entered.includes(id)) memory.passes[task] = { ...offset, byHand };
+  const pass = memory.passes[task];
+  if (!pass) return;
+  pass.byHand &&= byHand;
+  if (!left.includes(id)) return;
+  delete memory.passes[task];
+  const cos =
+    (pass.x * offset.x + pass.y * offset.y + pass.z * offset.z) /
+    ((hypot(pass.x, pass.y, pass.z) || 1) * (hypot(offset.x, offset.y, offset.z) || 1));
+  if (pass.byHand && cos < -0.5) mark(task);
 }
 
 /** Just above the surface of one of `bodies`, flown by hand: a low orbit sits in this band too. */
@@ -480,13 +643,13 @@ function circle(memory: TaskMemory, ctx: TaskContext, task: TaskId, ids: readonl
       break;
     }
   }
-  const current = memory.circle;
+  const current = memory.circles[task];
   if (!near) {
-    memory.circle = null;
+    delete memory.circles[task];
     return;
   }
   if (!current || current.id !== near.id) {
-    memory.circle = { id: near.id, last: near.angle, swept: 0 };
+    memory.circles[task] = { id: near.id, last: near.angle, swept: 0 };
     return;
   }
   let turn = near.angle - current.last;

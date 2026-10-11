@@ -11,7 +11,7 @@ export const LESSONS: readonly { title: string; body: string }[] = [
   },
   {
     title: "Chart a place",
-    body: "Pick a world, then Go. Finish the places in a chapter and Onward opens the next scale, from the near stars out to the galaxy clusters.",
+    body: "Pick a world, then Go. Finish the places in a chapter and Onward opens the next scale, from the near stars out to the edge of sight.",
   },
   {
     title: "Change the camera",
