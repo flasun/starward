@@ -17,6 +17,19 @@
   "vars": { "TURNSTILE_SITE_KEY": "0x4AAAAAAFUHp2JXbkMfseph" },
   // The daily trial's leaderboard. Create the tables once with
   // `npx wrangler d1 migrations apply STARWARD_DB --remote` (the deploy script does it).
+  // Pull request previews (`wrangler preview`, which Workers Builds runs on other branches) get
+  // their own board and no bot check, so trying a branch never touches the real board.
+  "previews": {
+    "vars": { "TURNSTILE_SITE_KEY": "" },
+    "d1_databases": [
+      {
+        "binding": "STARWARD_DB",
+        "database_name": "starward-preview",
+        "database_id": "702d661d-4a3c-46cc-a6a5-daab9027b931",
+        "migrations_dir": "d1/migrations"
+      }
+    ]
+  },
   "d1_databases": [
     {
       "binding": "STARWARD_DB",

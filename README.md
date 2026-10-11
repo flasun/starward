@@ -130,6 +130,7 @@ The board lives in the D1 database `starward`, bound as `STARWARD_DB` in `wrangl
 
 - `npm run deploy:cloudflare` applies them before it deploys.
 - The live database already has `0001_trial.sql`. Workers Builds deploys with plain `npx wrangler deploy`, so a new migration has to be applied by hand first: `npx wrangler d1 migrations apply STARWARD_DB --remote` from your machine.
+- Pull requests get a preview of their own: Workers Builds runs `wrangler preview` on other branches, using the `previews` block in `wrangler.jsonc`. Previews use a separate database, `starward-preview`, and skip the bot check, so posts there never reach the real board. Apply a new migration there too: `npx wrangler d1 migrations apply starward-preview --remote`.
 - Locally, `npx wrangler d1 migrations apply STARWARD_DB --local`, then `npm run preview:cloudflare`. `npm run dev` keeps a board in memory instead.
 
 How a post is checked: the client records the flight (position every 0.2 game seconds) and the server scores that record with the same code the client uses (`scoreTrace` in `trial.ts`). It has to start at the course start, never fly faster or turn harder than the ship can, and reach every stop in order; the posted time is the server's. A callsign belongs to the browser that first posted with it. Posts are limited to 20 per network per 10 minutes. None of this stops a determined cheat; sign-in can come later without losing the board.
