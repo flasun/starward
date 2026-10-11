@@ -178,6 +178,16 @@ export default defineConfig(({ command, isPreview, mode }) => ({
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
             serverDir: "./server",
+            // Safe on every target. No X-Frame-Options or frame-ancestors: Grok shows the
+            // game in a frame, and the "Created with Grok" script comes from grok.com.
+            routeRules: {
+              "/**": {
+                headers: {
+                  "x-content-type-options": "nosniff",
+                  "referrer-policy": "strict-origin-when-cross-origin",
+                },
+              },
+            },
           }),
         ]
       : []),

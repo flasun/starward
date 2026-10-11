@@ -163,6 +163,7 @@ export function TrialPanel() {
               </button>
             </div>
             {needsCheck && board?.siteKey ? <Turnstile siteKey={board.siteKey} onToken={setToken} /> : null}
+            <p className="more-note">Posting puts your callsign and time on today&apos;s board. Nothing else about you is kept.</p>
           </form>
         ) : null}
         {posted && !posted.ok ? (

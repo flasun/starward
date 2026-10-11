@@ -431,6 +431,68 @@
   text-decoration: none;
 }
 
+/* Not found, and the crash screen: the game's colours, centred. */
+.lost {
+  display: grid;
+  min-height: 100vh;
+  min-height: 100dvh;
+  place-items: center;
+  padding: var(--space-6);
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.lost > div {
+  width: min(22rem, 100%);
+}
+
+.lost h1 {
+  margin: 0.35rem 0 0;
+  font-size: 1.6rem;
+  font-weight: 560;
+  letter-spacing: -0.03em;
+}
+
+.lost p {
+  margin: 0.55rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.lost .lesson-kicker {
+  margin: 0;
+  color: var(--color-subtle);
+  font-size: 0.6875rem;
+}
+
+.lost-detail {
+  overflow-wrap: anywhere;
+}
+
+.lost a,
+.lost button {
+  display: inline-flex;
+  align-items: center;
+  height: 2.5rem;
+  margin-top: 1rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: var(--color-fg);
+  color: var(--color-accent-fg);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.lost a:focus-visible,
+.lost button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .login {
   display: grid;
   min-height: 100vh;
