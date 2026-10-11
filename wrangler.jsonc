@@ -11,12 +11,25 @@
   // "routes": [{ "pattern": "your.domain", "custom_domain": true }].
   "workers_dev": true,
   "observability": { "enabled": true },
-  // The bot check on leaderboard posts (Cloudflare Turnstile). Paste your widget's site key here
-  // and set its secret with `npx wrangler secret put TURNSTILE_SECRET`. Until both are set,
-  // posts skip the check.
-  "vars": { "TURNSTILE_SITE_KEY": "" },
+  // The bot check on leaderboard posts (Cloudflare Turnstile). The site key is public. The secret
+  // is a Worker secret, TURNSTILE_SECRET (dashboard, or `npx wrangler secret put`). Until both
+  // are set, posts skip the check.
+  "vars": { "TURNSTILE_SITE_KEY": "0x4AAAAAAFUHp2JXbkMfseph" },
   // The daily trial's leaderboard. Create the tables once with
   // `npx wrangler d1 migrations apply STARWARD_DB --remote` (the deploy script does it).
+  // Pull request previews (`wrangler preview`, which Workers Builds runs on other branches) get
+  // their own board and no bot check, so trying a branch never touches the real board.
+  "previews": {
+    "vars": { "TURNSTILE_SITE_KEY": "" },
+    "d1_databases": [
+      {
+        "binding": "STARWARD_DB",
+        "database_name": "starward-preview",
+        "database_id": "702d661d-4a3c-46cc-a6a5-daab9027b931",
+        "migrations_dir": "d1/migrations"
+      }
+    ]
+  },
   "d1_databases": [
     {
       "binding": "STARWARD_DB",

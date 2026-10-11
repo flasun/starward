@@ -115,13 +115,13 @@ d1/migrations/   The leaderboard's D1 schema
 React 19, TanStack Start, Tailwind v4, and raw WebGL2 (no engine). Nitro builds the server for one of two targets. `vite.config.ts` picks the target from the Vite mode:
 
 - **Vercel** (default). `npm run build`, and every build Grok runs.
-- **Cloudflare Workers** at `starward.<your-subdomain>.workers.dev`. `npm run build:cloudflare` builds with `--mode cloudflare`. Nitro merges `wrangler.jsonc` into the generated `.output/server/wrangler.json`, and `wrangler deploy` from the repo root uses that generated file.
+- **Cloudflare Workers**, live at <https://starward.banquetaillc.workers.dev>. `npm run build:cloudflare` builds with `--mode cloudflare`. Nitro merges `wrangler.jsonc` into the generated `.output/server/wrangler.json`, and `wrangler deploy` from the repo root uses that generated file.
 
 ### First Cloudflare deploy
 
 Deploy either way:
 
-- **From GitHub (Workers Builds).** In the dashboard, go to Workers & Pages, create a Worker named `starward`, and connect this repository. Set the build command to `npm run build:cloudflare` and leave the deploy command as `npx wrangler deploy`. Every push to `main` then deploys. The Worker name has to match `name` in `wrangler.jsonc`.
+- **From GitHub (Workers Builds).** This is how the live site deploys. In the dashboard, go to Workers & Pages, import this repository as a Worker named `starward`, set the build command to `npm run build:cloudflare`, and leave the deploy command as `npx wrangler deploy`. Every push to `main` then deploys. The Worker name has to match `name` in `wrangler.jsonc`, and it has to be the Cloudflare account that holds the `starward` database.
 - **From your machine.** Run `npx wrangler login`, then `npm run deploy:cloudflare`.
 
 ### The daily trial's leaderboard (Cloudflare D1)
@@ -129,7 +129,8 @@ Deploy either way:
 The board lives in the D1 database `starward`, bound as `STARWARD_DB` in `wrangler.jsonc`. Its tables are created by the migrations in `d1/migrations`:
 
 - `npm run deploy:cloudflare` applies them before it deploys.
-- With Workers Builds, set the deploy command to `npx wrangler d1 migrations apply STARWARD_DB --remote && npx wrangler deploy`. If the build token can't reach D1, run `npx wrangler d1 migrations apply STARWARD_DB --remote` once from your machine instead.
+- The live database already has `0001_trial.sql`. Workers Builds deploys with plain `npx wrangler deploy`, so a new migration has to be applied by hand first: `npx wrangler d1 migrations apply STARWARD_DB --remote` from your machine.
+- Pull requests get a preview of their own: Workers Builds runs `wrangler preview` on other branches, using the `previews` block in `wrangler.jsonc`. Previews use a separate database, `starward-preview`, and skip the bot check, so posts there never reach the real board. Apply a new migration there too: `npx wrangler d1 migrations apply starward-preview --remote`.
 - Locally, `npx wrangler d1 migrations apply STARWARD_DB --local`, then `npm run preview:cloudflare`. `npm run dev` keeps a board in memory instead.
 
 How a post is checked: the client records the flight (position every 0.2 game seconds) and the server scores that record with the same code the client uses (`scoreTrace` in `trial.ts`). It has to start at the course start, never fly faster or turn harder than the ship can, and reach every stop in order; the posted time is the server's. A callsign belongs to the browser that first posted with it. Posts are limited to 20 per network per 10 minutes. None of this stops a determined cheat; sign-in can come later without losing the board.
@@ -154,9 +155,9 @@ To add a custom domain later, put a `routes` entry with `"custom_domain": true` 
 Posts can go through [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/), so a script can't fill the board. It is off until you give the Worker a widget's keys:
 
 1. In the Cloudflare dashboard, open **Turnstile** and **Add widget**. Name it Starward, add the Worker's hostname (`starward.<your-subdomain>.workers.dev`, and your custom domain if you have one), and keep the mode **Managed**.
-2. Paste the **site key** into `wrangler.jsonc` as `"vars": { "TURNSTILE_SITE_KEY": "0x4AAAAAA..." }`. It is public, so it can be committed.
-3. Store the **secret key** on the Worker: `npx wrangler secret put TURNSTILE_SECRET`, then paste it.
-4. Deploy (`npm run deploy:cloudflare`).
+2. Put the **site key** in `wrangler.jsonc` under `"vars"` as `TURNSTILE_SITE_KEY`. It is public, so it is committed (the live widget's key is there now).
+3. Store the **secret key** on the Worker as a secret named `TURNSTILE_SECRET`: in the dashboard under Workers & Pages → starward → Settings → Variables and Secrets, or with `npx wrangler secret put TURNSTILE_SECRET`. Deploys keep secrets.
+4. Deploy: merging to `main` does it.
 
 With both set, the check runs out of sight when a run finishes and only asks for a click when Cloudflare is unsure. Every post gets a fresh check, and the server asks Cloudflare before it scores the run. If Cloudflare does not answer within five seconds, the post is refused rather than let through.
 
@@ -172,8 +173,8 @@ To try it locally, run the Cloudflare build with Cloudflare's [test keys](https:
 
 ## Launch checklist
 
-1. Deploy to Cloudflare: `npm run deploy:cloudflare`, or Workers Builds with the deploy command above. Either one creates the leaderboard tables.
-2. Open `starward.<your-subdomain>.workers.dev`: fly, then open Daily, finish a run, and post it. It should show as #1.
+1. Deploy to Cloudflare: Workers Builds (above), or `npm run deploy:cloudflare` from your machine.
+2. Open the site: fly, then open Daily, finish a run, and post it. It should show as #1. Remove a test run with the moderation commands above.
 3. Turn on the bot check (see [Bot check](#bot-check)), and optionally set a `TRIAL_SALT` secret.
 4. Optional: a custom domain (`routes` in `wrangler.jsonc`).
 5. Paste the address into a chat app to check the share card (`public/og.jpg`).
